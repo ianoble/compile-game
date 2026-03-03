@@ -17,4 +17,3 @@ export declare function isCardHidden(card: Card): card is HiddenCard;
  * to redact opponents' hands or the draw pile.
  */
 export declare function redactCards(cards: VisibleCard[]): HiddenCard[];
-//# sourceMappingURL=cards.d.ts.map

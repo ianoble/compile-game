@@ -1,9 +1,20 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.STANDARD_TILE_SHAPES = void 0;
+exports.defineTileShape = defineTileShape;
+exports.rotateTileOffsets = rotateTileOffsets;
+exports.getCellKey = getCellKey;
+exports.createTileLayer = createTileLayer;
+exports.canPlaceTile = canPlaceTile;
+exports.placeTile = placeTile;
+exports.getTileAt = getTileAt;
+exports.getTileCells = getTileCells;
 // ---------------------------------------------------------------------------
 // Shape definition
 // ---------------------------------------------------------------------------
 /** Factory for creating a tile shape template. */
-export function defineTileShape(id, offsets, label) {
-    return { id, offsets, label };
+function defineTileShape(id, offsets, label) {
+    return { id: id, offsets: offsets, label: label };
 }
 // ---------------------------------------------------------------------------
 // Rotation
@@ -12,40 +23,57 @@ export function defineTileShape(id, offsets, label) {
  * Rotate tile offsets clockwise by the given amount.
  * Normalizes the result so all offsets are non-negative (min row/col = 0).
  */
-export function rotateTileOffsets(offsets, rotation) {
-    const steps = rotation / 90;
-    let result = offsets.map(([r, c]) => [r, c]);
-    for (let i = 0; i < steps; i++) {
-        result = result.map(([r, c]) => [c, -r]);
+function rotateTileOffsets(offsets, rotation) {
+    var steps = rotation / 90;
+    var result = offsets.map(function (_a) {
+        var r = _a[0], c = _a[1];
+        return [r, c];
+    });
+    for (var i = 0; i < steps; i++) {
+        result = result.map(function (_a) {
+            var r = _a[0], c = _a[1];
+            return [c, -r];
+        });
     }
-    const minR = Math.min(...result.map(([r]) => r));
-    const minC = Math.min(...result.map(([, c]) => c));
-    return result.map(([r, c]) => [r - minR, c - minC]);
+    var minR = Math.min.apply(Math, result.map(function (_a) {
+        var r = _a[0];
+        return r;
+    }));
+    var minC = Math.min.apply(Math, result.map(function (_a) {
+        var c = _a[1];
+        return c;
+    }));
+    return result.map(function (_a) {
+        var r = _a[0], c = _a[1];
+        return [r - minR, c - minC];
+    });
 }
 // ---------------------------------------------------------------------------
 // Cell key helpers
 // ---------------------------------------------------------------------------
 /** Serialize row/col to an occupancy map key. */
-export function getCellKey(row, col) {
-    return `${row},${col}`;
+function getCellKey(row, col) {
+    return "".concat(row, ",").concat(col);
 }
 // ---------------------------------------------------------------------------
 // Layer operations
 // ---------------------------------------------------------------------------
 /** Create an empty tile layer. */
-export function createTileLayer() {
+function createTileLayer() {
     return { placed: {}, occupancy: {} };
 }
-let _tileCounter = 0;
+var _tileCounter = 0;
 /**
  * Check whether a tile shape can be placed at the given anchor with the
  * given rotation. All cells must be in-bounds and unoccupied.
  */
-export function canPlaceTile(layer, board, shape, anchorRow, anchorCol, rotation = 0) {
-    const rotated = rotateTileOffsets(shape.offsets, rotation);
-    for (const [dr, dc] of rotated) {
-        const r = anchorRow + dr;
-        const c = anchorCol + dc;
+function canPlaceTile(layer, board, shape, anchorRow, anchorCol, rotation) {
+    if (rotation === void 0) { rotation = 0; }
+    var rotated = rotateTileOffsets(shape.offsets, rotation);
+    for (var _i = 0, rotated_1 = rotated; _i < rotated_1.length; _i++) {
+        var _a = rotated_1[_i], dr = _a[0], dc = _a[1];
+        var r = anchorRow + dr;
+        var c = anchorCol + dc;
         if (r < 0 || r >= board.rows || c < 0 || c >= board.cols)
             return false;
         if (layer.occupancy[getCellKey(r, c)] !== undefined)
@@ -58,44 +86,51 @@ export function canPlaceTile(layer, board, shape, anchorRow, anchorCol, rotation
  * Computes absolute cell positions, registers in `placed` and `occupancy`.
  * Throws if placement is invalid. Returns the created `PlacedTile`.
  */
-export function placeTile(layer, board, shape, anchorRow, anchorCol, rotation = 0, owner = null, id) {
+function placeTile(layer, board, shape, anchorRow, anchorCol, rotation, owner, id) {
+    if (rotation === void 0) { rotation = 0; }
+    if (owner === void 0) { owner = null; }
     if (!canPlaceTile(layer, board, shape, anchorRow, anchorCol, rotation)) {
-        throw new Error(`Cannot place tile "${shape.id}" at (${anchorRow},${anchorCol}) rotation=${rotation}`);
+        throw new Error("Cannot place tile \"".concat(shape.id, "\" at (").concat(anchorRow, ",").concat(anchorCol, ") rotation=").concat(rotation));
     }
-    const tileId = id ?? `tile_${_tileCounter++}`;
-    const rotated = rotateTileOffsets(shape.offsets, rotation);
-    const cells = rotated.map(([dr, dc]) => [anchorRow + dr, anchorCol + dc]);
-    const tile = {
+    var tileId = id !== null && id !== void 0 ? id : "tile_".concat(_tileCounter++);
+    var rotated = rotateTileOffsets(shape.offsets, rotation);
+    var cells = rotated.map(function (_a) {
+        var dr = _a[0], dc = _a[1];
+        return [anchorRow + dr, anchorCol + dc];
+    });
+    var tile = {
         id: tileId,
         shapeId: shape.id,
-        owner,
-        anchorRow,
-        anchorCol,
-        rotation,
-        cells,
+        owner: owner,
+        anchorRow: anchorRow,
+        anchorCol: anchorCol,
+        rotation: rotation,
+        cells: cells,
     };
     layer.placed[tileId] = tile;
-    for (const [r, c] of cells) {
+    for (var _i = 0, cells_1 = cells; _i < cells_1.length; _i++) {
+        var _a = cells_1[_i], r = _a[0], c = _a[1];
         layer.occupancy[getCellKey(r, c)] = tileId;
     }
     return tile;
 }
 /** Get the placed tile covering a cell, or `undefined` if the cell is empty. */
-export function getTileAt(layer, row, col) {
-    const tileId = layer.occupancy[getCellKey(row, col)];
+function getTileAt(layer, row, col) {
+    var tileId = layer.occupancy[getCellKey(row, col)];
     if (tileId === undefined)
         return undefined;
     return layer.placed[tileId];
 }
 /** Get the absolute cell positions for a placed tile, or `undefined` if not found. */
-export function getTileCells(layer, tileId) {
-    return layer.placed[tileId]?.cells;
+function getTileCells(layer, tileId) {
+    var _a;
+    return (_a = layer.placed[tileId]) === null || _a === void 0 ? void 0 : _a.cells;
 }
 // ---------------------------------------------------------------------------
 // Standard shapes
 // ---------------------------------------------------------------------------
 /** Common polyomino shapes for convenience. Games can use these or define custom shapes. */
-export const STANDARD_TILE_SHAPES = {
+exports.STANDARD_TILE_SHAPES = {
     '1x1': defineTileShape('1x1', [[0, 0]], '1x1'),
     '1x2': defineTileShape('1x2', [[0, 0], [0, 1]], '1x2 horizontal'),
     '2x1': defineTileShape('2x1', [[0, 0], [1, 0]], '2x1 vertical'),
@@ -109,4 +144,3 @@ export const STANDARD_TILE_SHAPES = {
     'Z': defineTileShape('Z', [[0, 0], [0, 1], [1, 1], [1, 2]], 'Z'),
     'O': defineTileShape('O', [[0, 0], [0, 1], [1, 0], [1, 1]], 'O (2x2)'),
 };
-//# sourceMappingURL=tile-utils.js.map

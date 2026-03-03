@@ -17,8 +17,8 @@ export type { TurnNotificationOptions, TurnNotificationReturn } from './composab
 // Game registration (re-exported here so client apps use the same module
 // instance as the store — avoids the dist/src dual-instance problem).
 export { registerGame } from '../games/registry.js';
-export { defineGame } from '../types/index.js';
-export type { BaseGameState, GameDefinition } from '../types/index.js';
+export { defineGame, redactCards, isCardHidden } from '../types/index.js';
+export type { BaseGameState, GameDefinition, VisibleCard, HiddenCard, Card } from '../types/index.js';
 
 // Re-export boardgame.io types/values so consumers don't need a direct dependency.
 export type { Game, Ctx } from 'boardgame.io';

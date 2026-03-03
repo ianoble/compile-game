@@ -20,6 +20,9 @@ export const useGameStore = defineStore('game', () => {
   const clientVersion = ref(0);
 
   const G = shallowRef<Record<string, unknown>>({});
+  const ctx = shallowRef<{ currentPlayer: string; phase?: string; gameover?: unknown }>({
+    currentPlayer: '0',
+  });
   const currentPlayer = ref('0');
   const gameover = ref<{ winner?: string; isDraw?: boolean } | undefined>();
   const isActive = ref(false);
@@ -39,7 +42,7 @@ export const useGameStore = defineStore('game', () => {
   function syncState(state: unknown) {
     const s = state as {
       G: Record<string, unknown>;
-      ctx: { currentPlayer: string; gameover?: unknown };
+      ctx: { currentPlayer: string; phase?: string; gameover?: unknown };
       isActive: boolean;
       isConnected: boolean;
     } | null;
@@ -50,6 +53,7 @@ export const useGameStore = defineStore('game', () => {
     }
 
     G.value = s.G;
+    ctx.value = s.ctx;
     currentPlayer.value = s.ctx.currentPlayer;
     gameover.value = s.ctx.gameover as typeof gameover.value;
     isActive.value = s.isActive;
@@ -87,6 +91,7 @@ export const useGameStore = defineStore('game', () => {
     bgioClient = null;
     clientVersion.value++;
     G.value = {};
+    ctx.value = { currentPlayer: '0' };
     currentPlayer.value = '0';
     gameover.value = undefined;
     isActive.value = false;
@@ -97,6 +102,7 @@ export const useGameStore = defineStore('game', () => {
 
   return {
     G,
+    ctx,
     currentPlayer,
     gameover,
     isActive,

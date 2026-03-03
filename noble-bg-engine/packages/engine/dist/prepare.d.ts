@@ -12,4 +12,3 @@ import type { GameDefinition } from './types/index.js';
  *    wired into boardgame.io's `playerView`.
  */
 export declare function prepareGame(def: GameDefinition): Game;
-//# sourceMappingURL=prepare.d.ts.map

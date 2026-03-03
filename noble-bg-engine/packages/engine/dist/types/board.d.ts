@@ -36,4 +36,3 @@ export interface HexBoard<P extends GamePiece = GamePiece> {
 }
 /** Discriminated union of all board types. */
 export type Board<P extends GamePiece = GamePiece> = SquareBoard<P> | HexBoard<P>;
-//# sourceMappingURL=board.d.ts.map

@@ -13,4 +13,3 @@ export declare function createStandardDeck(): StandardCard[];
 /** Fisher-Yates in-place shuffle. Returns the same array for convenience. */
 export declare function shuffle<T>(array: T[]): T[];
 export {};
-//# sourceMappingURL=deck-utils.d.ts.map

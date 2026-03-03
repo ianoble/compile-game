@@ -26,4 +26,3 @@ export declare function addToSlot<T>(slot: Slot<T>, item: T): boolean;
 export declare function removeFromSlot<T>(slot: Slot<T>, index: number): T | undefined;
 /** Check whether a slot is at its capacity limit. Always `false` for unlimited slots. */
 export declare function isSlotFull<T>(slot: Slot<T>): boolean;
-//# sourceMappingURL=player-board-utils.d.ts.map

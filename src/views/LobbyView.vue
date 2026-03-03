@@ -101,6 +101,7 @@ const setupData = ref<Record<string, unknown>>(buildDefaultSetupData());
 
 const BASE_MAX_PLAYERS = 4;
 const effectiveMaxPlayers = computed(() => (setupData.value.expansion ? gameDef.maxPlayers : Math.min(gameDef.maxPlayers, BASE_MAX_PLAYERS)));
+const playerCountFixed = computed(() => gameDef.minPlayers === gameDef.maxPlayers);
 watch(effectiveMaxPlayers, (max) => {
 	if (numPlayers.value > max) numPlayers.value = max;
 });
@@ -656,7 +657,7 @@ onUnmounted(stopPolling);
 						<div v-else class="p-5 bg-slate-800 border border-slate-700 rounded-xl max-w-md space-y-4">
 							<h3 class="font-semibold">New Game</h3>
 
-							<div class="space-y-2">
+							<div v-if="!playerCountFixed" class="space-y-2">
 								<label class="block text-sm text-slate-400">Number of Players</label>
 								<div class="flex items-center gap-3">
 									<button
@@ -676,6 +677,9 @@ onUnmounted(stopPolling);
 									</button>
 									<span class="text-sm text-slate-500 ml-1">({{ gameDef.minPlayers }}&ndash;{{ effectiveMaxPlayers }})</span>
 								</div>
+							</div>
+							<div v-else class="text-sm text-slate-400">
+								{{ gameDef.maxPlayers }} players
 							</div>
 
 							<!-- Setup options (driven by gameDef.setupOptions) -->

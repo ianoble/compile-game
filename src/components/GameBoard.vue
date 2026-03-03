@@ -1,263 +1,201 @@
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from "vue";
+import { ref, computed } from "vue";
 import { useGame } from "@engine/client/index";
-import { getPlayerRankings, BOARD_SIZE, type TemplateGameState } from "../logic/game-logic";
+import type { CompileGameState } from "../logic/game-logic";
+import { NUM_COLUMNS } from "../logic/game-logic";
 
 defineProps<{ headerHeight: number }>();
 const emit = defineEmits<{ "back-to-lobby": [] }>();
 
 const { state, move, isMyTurn, playerID } = useGame();
-const G = computed(() => state.value as unknown as TemplateGameState | undefined);
-const board = computed(() => G.value?.board ?? []);
+const G = computed(() => state.value as unknown as CompileGameState | undefined);
 
-function cellOwner(row: number, col: number): string | null {
-	const b = board.value;
-	if (!b[row]) return null;
-	return b[row][col] ?? null;
+const columns = computed(() => G.value?.columns ?? []);
+const myId = computed(() => playerID.value ?? null);
+const myHand = computed(() => {
+	const pid = myId.value;
+	if (!pid || !G.value?.players) return [];
+	return G.value.players[pid]?.hand ?? [];
+});
+
+const COLUMN_LABELS = ['Left', 'Center', 'Right'] as const;
+
+// Play flow: select card from hand, then choose column and face up/down
+const selectedHandIndex = ref<number | null>(null);
+const playFaceUp = ref(true);
+
+function playToColumn(columnIndex: number) {
+	const idx = selectedHandIndex.value;
+	if (idx == null || !isMyTurn.value) return;
+	move('playCommandCard', columnIndex, idx, playFaceUp.value);
+	selectedHandIndex.value = null;
 }
 
-// Game over overlay: score table with count-up animation (same pattern as Golden Ages)
-const gameIsOver = computed(() => G.value?.endGameScored === true);
-const gameOverDismissed = ref(false);
-
-const finalRankings = computed(() => {
-	if (!gameIsOver.value || !G.value) return [];
-	return getPlayerRankings(G.value);
-});
-
-const finalScoreTableRows = computed(() => {
-	if (!G.value?.endGameScoreBreakdown || !finalRankings.value.length) return [];
-	const breakdown = G.value.endGameScoreBreakdown;
-	const playerIds = finalRankings.value.map((r) => r.playerId);
-	const firstPid = playerIds[0];
-	const labels = (breakdown[firstPid] ?? []).map((item) => item.label);
-	const rows: { label: string; vpsByPlayer: Record<string, number> }[] = [];
-	for (const label of labels) {
-		const vpsByPlayer: Record<string, number> = {};
-		for (const pid of playerIds) {
-			const item = (breakdown[pid] ?? []).find((e) => e.label === label);
-			vpsByPlayer[pid] = item?.vp ?? 0;
-		}
-		rows.push({ label, vpsByPlayer });
-	}
-	return rows;
-});
-
-const scoreRevealCurrentIndex = ref(0);
-const scoreRevealDisplayValue = ref(0);
-const scoreTableRevealComplete = ref(false);
-const SCORE_CELL_DURATION_MS = 420;
-const SCORE_CELL_MIN_MS = 180;
-const SCORE_CELL_MAX_MS = 700;
-
-function getScoreCellIndex(rowIdx: number, colIdx: number): number {
-	return rowIdx * finalRankings.value.length + colIdx;
+function cardLabel(cardId: string): string {
+	if (cardId === '[hidden]') return '?';
+	const m = cardId.match(/command-(\d+)/);
+	return m ? `Command ${m[1]}` : cardId;
 }
 
-let scoreRevealRaf = 0;
-let scoreRevealStartTime = 0;
-
-function tickScoreReveal(timestamp: number) {
-	if (!scoreRevealStartTime) scoreRevealStartTime = timestamp;
-	const elapsed = timestamp - scoreRevealStartTime;
-	const rows = finalScoreTableRows.value;
-	const numPlayers = finalRankings.value.length;
-	const totalCells = rows.length * numPlayers;
-	const currentIdx = scoreRevealCurrentIndex.value;
-	if (currentIdx >= totalCells) {
-		scoreTableRevealComplete.value = true;
-		return;
-	}
-	const rowIdx = Math.floor(currentIdx / numPlayers);
-	const colIdx = currentIdx % numPlayers;
-	const targetValue = rows[rowIdx]?.vpsByPlayer[finalRankings.value[colIdx]?.playerId ?? ""] ?? 0;
-	const duration = Math.min(SCORE_CELL_MAX_MS, Math.max(SCORE_CELL_MIN_MS, SCORE_CELL_DURATION_MS + targetValue * 12));
-	const progress = Math.min(1, elapsed / duration);
-	const easeOut = 1 - (1 - progress) * (1 - progress);
-	scoreRevealDisplayValue.value = Math.round(easeOut * targetValue);
-	if (progress >= 1) {
-		scoreRevealCurrentIndex.value = currentIdx + 1;
-		scoreRevealStartTime = timestamp;
-		scoreRevealDisplayValue.value = 0;
-		if (currentIdx + 1 < totalCells) {
-			scoreRevealRaf = requestAnimationFrame(tickScoreReveal);
-		} else {
-			scoreTableRevealComplete.value = true;
-		}
-		return;
-	}
-	scoreRevealRaf = requestAnimationFrame(tickScoreReveal);
+function protocolLabel(protocolId: string | null): string {
+	if (!protocolId) return '—';
+	const m = protocolId.match(/protocol-(\d+)/);
+	return m ? `Protocol ${m[1]}` : protocolId;
 }
 
-function startScoreTableReveal() {
-	scoreRevealCurrentIndex.value = 0;
-	scoreRevealDisplayValue.value = 0;
-	scoreTableRevealComplete.value = false;
-	scoreRevealStartTime = 0;
-	if (finalScoreTableRows.value.length && finalRankings.value.length) {
-		scoreRevealRaf = requestAnimationFrame(tickScoreReveal);
-	} else {
-		scoreTableRevealComplete.value = true;
-	}
+const COMPILE_THRESHOLD = 10;
+
+function columnTotal(col: { commandStack: { value?: number }[] }): number {
+	return col.commandStack.reduce((s, e) => s + (e.value ?? 0), 0);
 }
 
-watch([gameIsOver, gameOverDismissed], ([over, dismissed]) => {
-	if (!over || dismissed) return;
-	const t = setTimeout(() => startScoreTableReveal(), 320);
-	return () => clearTimeout(t);
+const myCompiledCount = computed(() => {
+	if (!G.value?.columns || myId.value == null) return 0;
+	const p = myId.value === '0' ? 0 : 1;
+	return G.value.columns.filter((col) => col.protocolCompiled?.[p]).length;
 });
 
-onUnmounted(() => {
-	if (scoreRevealRaf) cancelAnimationFrame(scoreRevealRaf);
+const opponentCompiledCount = computed(() => {
+	if (!G.value?.columns || myId.value == null) return 0;
+	const p = myId.value === '0' ? 1 : 0;
+	return G.value.columns.filter((col) => col.protocolCompiled?.[p]).length;
 });
-
-const PLAYER_COLOR_CLASSES: Record<string, string> = {
-	red: "bg-red-500",
-	blue: "bg-blue-500",
-	green: "bg-green-500",
-	yellow: "bg-yellow-400",
-};
-
-const myGold = computed(() => {
-	const pid = playerID?.value;
-	if (!G.value?.players || pid == null) return 0;
-	return G.value.players[pid]?.gold ?? 0;
-});
-
-const boardIndices = Array.from({ length: BOARD_SIZE }, (_, i) => i);
 </script>
 
 <template>
-	<div class="w-full max-w-lg mx-auto space-y-6">
-		<p class="text-center text-slate-400 text-sm">Claim cells or take gold. When the board is full, territory and gold score like Golden Ages.</p>
-		<div v-if="G?.players" class="flex justify-center gap-4 text-sm">
-			<span class="text-slate-400"
-				>Your gold: <strong class="text-amber-300 tabular-nums">{{ myGold }}</strong></span
-			>
-			<button
-				v-if="!gameIsOver && isMyTurn"
-				type="button"
-				class="px-3 py-1 rounded bg-amber-700 hover:bg-amber-600 text-amber-100 font-medium transition-colors"
-				@click="move('takeGold')"
-			>
-				Take 3 gold (skip placing)
-			</button>
-		</div>
-		<div
-			class="grid gap-1.5 w-fit mx-auto"
-			:style="{ gridTemplateColumns: `repeat(${BOARD_SIZE}, 56px)`, gridTemplateRows: `repeat(${BOARD_SIZE}, 56px)` }"
-		>
-			<template v-for="row in boardIndices" :key="'r' + row">
-				<template v-for="col in boardIndices" :key="'c' + row + '-' + col">
-					<button
-						type="button"
-						class="w-full h-full rounded-lg border-2 transition-colors flex items-center justify-center text-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed"
-						:class="
-							cellOwner(row, col)
-								? [
-										PLAYER_COLOR_CLASSES[G?.players[cellOwner(row, col)!]?.color ?? ''] ?? 'bg-slate-600',
-										'border-slate-500 text-white',
-									]
-								: isMyTurn && !gameIsOver
-									? 'bg-slate-800 border-slate-600 hover:bg-slate-700 hover:border-slate-500 text-slate-400'
-									: 'bg-slate-800/60 border-slate-700 text-slate-500'
-						"
-						:disabled="!isMyTurn || gameIsOver || cellOwner(row, col) !== null"
-						@click="move('placePiece', row, col)"
-					>
-						{{ cellOwner(row, col) !== null ? (G?.players[cellOwner(row, col)!]?.color?.charAt(0) ?? "") : "" }}
-					</button>
-				</template>
-			</template>
-		</div>
-	</div>
+	<div class="w-full max-w-4xl mx-auto space-y-6">
+		<p class="text-center text-slate-400 text-sm">
+			Play command cards to columns. When a column total reaches 10+, your protocol there compiles. First to compile all 3 wins.
+		</p>
 
-	<!-- Game Over: score table with count-up animation -->
-	<div v-if="gameIsOver && !gameOverDismissed" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center">
-		<div class="bg-slate-800 border border-slate-600 rounded-2xl shadow-2xl p-8 max-w-2xl w-full mx-4">
-			<h2 class="text-2xl font-bold text-amber-300 text-center mb-2">Game Over</h2>
-			<p class="text-amber-200/90 text-sm text-center mb-6 font-medium">Final score</p>
-			<div class="overflow-x-auto">
-				<table class="w-full text-sm border-collapse min-w-[280px]">
-					<thead>
-						<tr class="border-b border-slate-600">
-							<th class="text-left py-2 pr-3 text-slate-400 font-medium">Score</th>
-							<th
-								v-for="(r, idx) in finalRankings"
-								:key="r.playerId"
-								class="py-2 px-2 text-center font-medium"
-								:class="idx === 0 ? 'text-amber-300' : 'text-slate-300'"
-							>
-								<div class="flex items-center justify-center gap-1.5">
-									<span class="w-3 h-3 rounded-full shrink-0" :class="PLAYER_COLOR_CLASSES[G?.players[r.playerId]?.color ?? '']" />
-									<span class="capitalize">{{ G?.players[r.playerId]?.color ?? "" }}</span>
-									<span v-if="idx === 0" class="text-amber-400">★</span>
-								</div>
-							</th>
-						</tr>
-					</thead>
-					<tbody>
-						<tr
-							v-for="(row, rowIdx) in finalScoreTableRows"
-							:key="row.label"
-							class="border-b border-slate-700/60"
-							:class="row.label === 'Final score' ? 'border-t-2 border-amber-600/50 bg-slate-800/50' : ''"
-						>
-							<td class="py-1.5 pr-3 text-slate-400 font-medium">{{ row.label }}</td>
-							<td
-								v-for="(r, colIdx) in finalRankings"
-								:key="r.playerId"
-								class="py-1.5 px-2 text-center tabular-nums transition-all duration-150 rounded"
-								:class="[
-									row.label === 'Final score' ? 'text-amber-200 font-bold' : 'text-slate-200',
-									getScoreCellIndex(rowIdx, colIdx) === scoreRevealCurrentIndex && !scoreTableRevealComplete
-										? 'score-cell-active bg-amber-500/25 text-amber-100'
-										: '',
-								]"
-							>
-								<template v-if="getScoreCellIndex(rowIdx, colIdx) < scoreRevealCurrentIndex">
-									{{ row.vpsByPlayer[r.playerId] ?? 0 }}
-								</template>
-								<template v-else-if="getScoreCellIndex(rowIdx, colIdx) === scoreRevealCurrentIndex && !scoreTableRevealComplete">
-									{{ scoreRevealDisplayValue }}
-								</template>
-								<template v-else>
-									{{ scoreTableRevealComplete ? (row.vpsByPlayer[r.playerId] ?? 0) : 0 }}
-								</template>
-							</td>
-						</tr>
-					</tbody>
-				</table>
+		<!-- Compiled count: you vs opponent -->
+		<div v-if="G?.columns" class="flex justify-center gap-6 text-sm">
+			<span class="text-slate-300">Your protocols compiled: <strong class="text-emerald-400">{{ myCompiledCount }}/3</strong></span>
+			<span class="text-slate-500">|</span>
+			<span class="text-slate-400">Opponent: <strong>{{ opponentCompiledCount }}/3</strong></span>
+		</div>
+
+		<!-- 3 columns: protocol row + command stack -->
+		<div class="grid gap-6" :style="{ gridTemplateColumns: `repeat(${NUM_COLUMNS}, 1fr)` }">
+			<div
+				v-for="(col, colIdx) in columns"
+				:key="colIdx"
+				class="rounded-xl border border-slate-600 bg-slate-800/60 p-4 min-h-[140px] flex flex-col"
+			>
+				<div class="flex items-center justify-between mb-2">
+					<span class="text-xs font-medium text-slate-500 uppercase tracking-wide">{{ COLUMN_LABELS[colIdx] }}</span>
+					<span
+						class="text-xs tabular-nums"
+						:class="columnTotal(col) >= COMPILE_THRESHOLD ? 'text-amber-400 font-semibold' : 'text-slate-500'"
+					>
+						{{ columnTotal(col) }}/{{ COMPILE_THRESHOLD }}
+					</span>
+				</div>
+				<!-- Protocol row: two slots back-to-back (player 0 vs player 1) -->
+				<div class="flex gap-2 mb-3">
+					<div
+						class="flex-1 min-h-[52px] rounded-lg border flex flex-col items-center justify-center text-xs"
+						:class="
+							col.protocolCompiled?.[myId === '0' ? 0 : 1]
+								? 'bg-amber-900/40 border-amber-600 text-amber-200'
+								: 'border-slate-600 bg-slate-700/50 text-slate-300'
+						"
+					>
+						{{ myId === '0' ? protocolLabel(col.protocol[0]) : protocolLabel(col.protocol[1]) }}
+						<span v-if="col.protocolCompiled?.[myId === '0' ? 0 : 1]" class="text-[10px] text-amber-400 mt-0.5">Compiled</span>
+					</div>
+					<div class="text-slate-500 self-center text-xs">vs</div>
+					<div
+						class="flex-1 min-h-[52px] rounded-lg border flex flex-col items-center justify-center text-xs"
+						:class="
+							col.protocolCompiled?.[myId === '0' ? 1 : 0]
+								? 'bg-amber-900/40 border-amber-600 text-amber-200'
+								: 'border-slate-600 bg-slate-700/50 text-slate-300'
+						"
+					>
+						{{ myId === '0' ? protocolLabel(col.protocol[1]) : protocolLabel(col.protocol[0]) }}
+						<span v-if="col.protocolCompiled?.[myId === '0' ? 1 : 0]" class="text-[10px] text-amber-400 mt-0.5">Compiled</span>
+					</div>
+				</div>
+				<!-- Command stack -->
+				<div class="flex flex-wrap gap-1.5 flex-1">
+					<div
+						v-for="(entry, stackIdx) in col.commandStack"
+						:key="`${colIdx}-${stackIdx}`"
+						class="w-12 h-16 rounded border flex flex-col items-center justify-center text-[10px] font-medium"
+						:class="
+							entry.faceUp
+								? 'bg-slate-600 border-slate-500 text-slate-200'
+								: 'bg-slate-700 border-slate-600 text-slate-500'
+						"
+					>
+						<span>{{ entry.owner === myId ? cardLabel(entry.cardId) : (entry.faceUp ? cardLabel(entry.cardId) : '?') }}</span>
+						<span v-if="entry.faceUp || entry.owner === myId" class="text-[9px] text-slate-400 mt-0.5">{{ entry.value }}</span>
+					</div>
+				</div>
 			</div>
-			<div class="flex justify-center gap-3 mt-6">
+		</div>
+
+		<!-- Play controls: face up/down + column choice when card selected -->
+		<div v-if="isMyTurn && myHand.length > 0" class="space-y-3">
+			<div v-if="selectedHandIndex === null" class="text-center text-slate-400 text-sm">
+				Select a card from your hand, then choose a column below.
+			</div>
+			<div v-else class="flex flex-wrap items-center justify-center gap-3">
+				<label class="flex items-center gap-2 text-sm text-slate-300">
+					<input v-model="playFaceUp" type="checkbox" class="rounded border-slate-500" />
+					Play face up
+				</label>
+				<span class="text-slate-500">→</span>
+				<div class="flex gap-2">
+					<button
+						v-for="(label, colIdx) in COLUMN_LABELS"
+						:key="colIdx"
+						type="button"
+						class="px-4 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 text-slate-100 font-medium text-sm transition-colors"
+						@click="playToColumn(colIdx)"
+					>
+						{{ label }}
+					</button>
+				</div>
 				<button
-					class="px-5 py-2 rounded-lg bg-amber-700 hover:bg-amber-600 text-white font-medium transition-colors cursor-pointer"
-					@click="emit('back-to-lobby')"
+					type="button"
+					class="px-3 py-1.5 rounded text-sm text-slate-500 hover:text-slate-300"
+					@click="selectedHandIndex = null"
 				>
-					Back to Lobby
+					Cancel
 				</button>
+			</div>
+		</div>
+
+		<!-- Hand -->
+		<div class="mt-6">
+			<h3 class="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Your hand</h3>
+			<div class="flex flex-wrap justify-center gap-2 min-h-[100px]">
 				<button
-					class="px-5 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 font-medium transition-colors cursor-pointer"
-					@click="gameOverDismissed = true"
+					v-for="(card, idx) in myHand"
+					:key="'hidden' in card ? `h-${idx}` : (card as { id: string }).id"
+					type="button"
+					class="w-14 h-20 rounded-lg border-2 flex flex-col items-center justify-center text-xs font-medium transition-all"
+					:class="
+						selectedHandIndex === idx
+							? 'bg-emerald-800/60 border-emerald-500 ring-2 ring-emerald-400/50'
+							: isMyTurn
+								? 'bg-slate-700 border-slate-500 hover:border-slate-400 text-slate-200'
+								: 'bg-slate-800 border-slate-600 text-slate-400'
+					"
+					:disabled="!isMyTurn"
+					@click="isMyTurn && (selectedHandIndex === idx ? (selectedHandIndex = null) : (selectedHandIndex = idx))"
 				>
-					View Board
+					<template v-if="'hidden' in card">
+						<span class="text-slate-500">?</span>
+					</template>
+					<template v-else>
+						<span>{{ (card as { name?: string }).name ?? (card as { id: string }).id }}</span>
+						<span class="text-[10px] text-slate-400 mt-0.5">{{ (card as { value?: number }).value ?? '?' }}</span>
+					</template>
 				</button>
 			</div>
 		</div>
 	</div>
 </template>
-
-<style scoped>
-.score-cell-active {
-	animation: score-cell-pulse 0.6s ease-in-out infinite;
-}
-@keyframes score-cell-pulse {
-	0%,
-	100% {
-		box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.25);
-	}
-	50% {
-		box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.15);
-	}
-}
-</style>

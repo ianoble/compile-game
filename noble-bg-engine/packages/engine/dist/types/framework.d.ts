@@ -118,4 +118,3 @@ export interface GameContext<S = unknown> {
     isActive: boolean;
     isConnected: boolean;
 }
-//# sourceMappingURL=framework.d.ts.map

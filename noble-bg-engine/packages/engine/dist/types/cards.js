@@ -1,5 +1,9 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.isCardHidden = isCardHidden;
+exports.redactCards = redactCards;
 /** Type guard: returns `true` when the card's data has been redacted. */
-export function isCardHidden(card) {
+function isCardHidden(card) {
     return 'hidden' in card && card.hidden === true;
 }
 /**
@@ -7,7 +11,6 @@ export function isCardHidden(card) {
  * {@link HiddenCard} objects.  Useful inside `stripSecretInfo`
  * to redact opponents' hands or the draw pile.
  */
-export function redactCards(cards) {
-    return cards.map(() => ({ hidden: true }));
+function redactCards(cards) {
+    return cards.map(function () { return ({ hidden: true }); });
 }
-//# sourceMappingURL=cards.js.map

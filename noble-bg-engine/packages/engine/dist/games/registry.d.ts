@@ -5,4 +5,3 @@ export declare const gameRegistry: GameDefinition[];
 export declare const gameMap: Record<string, GameDefinition>;
 /** Register a game at runtime so external projects can add their own games. */
 export declare function registerGame(def: GameDefinition): void;
-//# sourceMappingURL=registry.d.ts.map

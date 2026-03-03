@@ -1,3 +1,6 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.defineGame = defineGame;
 /**
  * Type-safe factory for creating a {@link GameDefinition}.
  * Constrains `S` to extend {@link BaseGameState} at the call-site,
@@ -19,7 +22,6 @@
  * });
  * ```
  */
-export function defineGame(def) {
+function defineGame(def) {
     return def;
 }
-//# sourceMappingURL=framework.js.map

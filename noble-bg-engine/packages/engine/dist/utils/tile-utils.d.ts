@@ -28,4 +28,3 @@ export declare function getTileAt(layer: TileLayer, row: number, col: number): P
 export declare function getTileCells(layer: TileLayer, tileId: string): [number, number][] | undefined;
 /** Common polyomino shapes for convenience. Games can use these or define custom shapes. */
 export declare const STANDARD_TILE_SHAPES: Record<string, TileShape>;
-//# sourceMappingURL=tile-utils.d.ts.map

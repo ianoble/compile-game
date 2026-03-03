@@ -34,4 +34,3 @@ export interface Slot<T = unknown> {
     capacity?: number;
     label?: string;
 }
-//# sourceMappingURL=player-board.d.ts.map

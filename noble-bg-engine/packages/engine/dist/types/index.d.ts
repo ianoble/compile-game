@@ -5,4 +5,3 @@ export { isCardHidden, redactCards } from './cards.js';
 export type { GamePiece, BoardCell, SquareBoard, HexCoord, HexBoard, Board } from './board.js';
 export type { ResourcePool, Track, Slot } from './player-board.js';
 export type { TileShape, TileRotation, PlacedTile, TileLayer } from './tile.js';
-//# sourceMappingURL=index.d.ts.map

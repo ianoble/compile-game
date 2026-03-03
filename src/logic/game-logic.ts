@@ -2,129 +2,219 @@ import type { Game, Ctx } from 'boardgame.io';
 import { defineGame } from '@engine/client/index';
 import type { BaseGameState } from '@engine/client/index';
 import { INVALID_MOVE } from 'boardgame.io/core';
+import type { VisibleCard } from '@engine/client/index';
+import { redactCards } from '@engine/client/index';
+import { getCommandDeck, getProtocolDeck, shuffle } from './compile-cards';
 
 // ---------------------------------------------------------------------------
-// Types — minimal Golden-Ages-style: board, territory, gold, multi-category scoring
+// Constants
 // ---------------------------------------------------------------------------
 
-export type PlayerColor = 'red' | 'blue' | 'green' | 'yellow';
+export const NUM_COLUMNS = 3;
 
-export const PLAYER_COLORS: PlayerColor[] = ['red', 'blue', 'green', 'yellow'];
+/** For lobby/join: 2 seats only. */
+export type PlayerColor = 'red' | 'blue';
+export const PLAYER_COLORS: PlayerColor[] = ['red', 'blue'];
+const DRAFT_ORDER = ['0', '1', '1', '0', '0', '1'] as const; // 1-2-2-1 picks
+const HAND_SIZE = 5;
 
-export const BOARD_SIZE = 4;
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
-export interface TemplateGameState extends BaseGameState {
-	/** 2D board: cell is playerId who placed there, or null. */
-	board: (string | null)[][];
-	players: Record<string, { color: PlayerColor; score: number; gold: number }>;
-	endGameScored: boolean;
-	endGameScoreBreakdown: Record<string, { label: string; vp: number }[]>;
+export interface CommandStackEntry {
+	cardId: string;
+	owner: string;
+	faceUp: boolean;
+	/** Value contributing to column total; when sum >= 10, current player's protocol compiles. */
+	value: number;
+}
+
+export interface ColumnState {
+	/** [player0, player1] protocol card IDs at top of column */
+	protocol: [string | null, string | null];
+	/** [player0, player1] whether that player's protocol in this column has been compiled (flipped). */
+	protocolCompiled: [boolean, boolean];
+	commandStack: CommandStackEntry[];
+}
+
+export interface CompilePlayerState {
+	hand: VisibleCard[];
+	protocolCards: VisibleCard[];
+}
+
+export interface CompileGameState extends BaseGameState {
+	/** Draft phase: pool of protocol cards to pick from */
+	protocolPool: VisibleCard[];
+	/** Play phase: draw pile (card IDs) */
+	commandDeck: string[];
+	players: Record<string, CompilePlayerState>;
+	/** 3 columns: left, center, right */
+	columns: ColumnState[];
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function createEmptyBoard(): (string | null)[][] {
-	return Array(BOARD_SIZE)
-		.fill(null)
-		.map(() => Array(BOARD_SIZE).fill(null));
+function createInitialColumns(): ColumnState[] {
+	return Array.from({ length: NUM_COLUMNS }, () => ({
+		protocol: [null, null],
+		protocolCompiled: [false, false],
+		commandStack: [],
+	}));
 }
 
-function isBoardFull(G: TemplateGameState): boolean {
-	return G.board.every((row) => row.every((cell) => cell !== null));
+function createEmptyPlayers(): Record<string, CompilePlayerState> {
+	return {
+		'0': { hand: [], protocolCards: [] },
+		'1': { hand: [], protocolCards: [] },
+	};
 }
 
-function countTerritory(G: TemplateGameState, playerId: string): number {
-	let count = 0;
-	for (const row of G.board) {
-		for (const cell of row) {
-			if (cell === playerId) count++;
+/** Setup: 2 players only, shuffle decks, start in draft. */
+function setup(ctx: Ctx): CompileGameState {
+	if (ctx.numPlayers !== 2) {
+		throw new Error('Compile is a 2-player game only');
+	}
+	const protocolDeck = shuffle([...getProtocolDeck()]);
+	return {
+		protocolPool: protocolDeck,
+		commandDeck: [],
+		players: createEmptyPlayers(),
+		columns: createInitialColumns(),
+		history: [],
+	};
+}
+
+/** Draft phase: pick one protocol card from pool. */
+function draftProtocol(
+	{ G, ctx }: { G: CompileGameState; ctx: Ctx },
+	poolIndex: number
+): typeof INVALID_MOVE | void {
+	if (ctx.phase !== 'draft') return INVALID_MOVE;
+	const pool = G.protocolPool;
+	if (poolIndex < 0 || poolIndex >= pool.length) return INVALID_MOVE;
+	const playerId = ctx.currentPlayer;
+	const player = G.players[playerId];
+	if (!player || player.protocolCards.length >= 3) return INVALID_MOVE;
+
+	const [card] = pool.splice(poolIndex, 1);
+	player.protocolCards.push(card);
+}
+
+const COMPILE_THRESHOLD = 10;
+
+/** Sum of command card values in a column. */
+function columnSum(col: ColumnState): number {
+	return col.commandStack.reduce((s, e) => s + e.value, 0);
+}
+
+/** Play phase: play one command card from hand to a column, face up or face down. */
+function playCommandCard(
+	{ G, ctx }: { G: CompileGameState; ctx: Ctx },
+	columnIndex: number,
+	handIndex: number,
+	faceUp: boolean
+): typeof INVALID_MOVE | void {
+	if (ctx.phase !== 'play') return INVALID_MOVE;
+	if (columnIndex < 0 || columnIndex >= NUM_COLUMNS) return INVALID_MOVE;
+	const playerId = ctx.currentPlayer;
+	const player = G.players[playerId];
+	if (!player) return INVALID_MOVE;
+	const hand = player.hand;
+	if (handIndex < 0 || handIndex >= hand.length) return INVALID_MOVE;
+
+	const card = hand[handIndex];
+	const cardId = typeof card === 'object' && card && 'id' in card ? (card as VisibleCard).id : String(card);
+	const value = typeof card === 'object' && card && 'value' in card ? (card as VisibleCard & { value: number }).value : 1;
+	player.hand.splice(handIndex, 1);
+	const col = G.columns[columnIndex];
+	col.commandStack.push({
+		cardId,
+		owner: playerId,
+		faceUp,
+		value,
+	});
+	// When column total >= 10, this player's protocol in this column is compiled (flipped).
+	if (columnSum(col) >= COMPILE_THRESHOLD) {
+		const p = playerId === '0' ? 0 : 1;
+		col.protocolCompiled[p] = true;
+	}
+}
+
+/** When draft ends: place protocols on columns, shuffle command deck, deal hands. */
+function onPlayPhaseBegin({ G }: { G: CompileGameState }): void {
+	// Place each player's 3 protocol cards on the 3 columns (one per column)
+	for (let col = 0; col < NUM_COLUMNS; col++) {
+		G.columns[col].protocol[0] = (G.players['0'].protocolCards[col] as VisibleCard)?.id ?? null;
+		G.columns[col].protocol[1] = (G.players['1'].protocolCards[col] as VisibleCard)?.id ?? null;
+	}
+	// Build and shuffle full command deck (with values), then deal 5 each
+	const fullDeck = shuffle([...getCommandDeck()]);
+	let deckIdx = 0;
+	const deal = (playerId: string) => {
+		const player = G.players[playerId];
+		for (let i = 0; i < HAND_SIZE && deckIdx < fullDeck.length; i++) {
+			const c = fullDeck[deckIdx++];
+			player.hand.push({ id: c.id, name: c.name, value: c.value });
 		}
-	}
-	return count;
-}
-
-function performEndGameScoring(G: TemplateGameState): void {
-	if (G.endGameScored) return;
-	G.endGameScored = true;
-	const pids = Object.keys(G.players);
-	G.endGameScoreBreakdown = {};
-	for (const pid of pids) {
-		const territory = countTerritory(G, pid);
-		const goldVp = Math.floor(G.players[pid].gold / 3);
-		G.players[pid].score = territory + goldVp;
-		G.endGameScoreBreakdown[pid] = [
-			{ label: 'Territory (1 VP per cell)', vp: territory },
-			{ label: 'Gold (1 VP per 3)', vp: goldVp },
-			{ label: 'Final score', vp: territory + goldVp },
-		];
-	}
+	};
+	deal('0');
+	deal('1');
+	G.commandDeck = fullDeck.slice(deckIdx).map((c) => c.id);
 }
 
 // ---------------------------------------------------------------------------
 // Game
 // ---------------------------------------------------------------------------
 
-export const TemplateGame: Game<TemplateGameState> = {
-	name: 'template-game',
+export const CompileGame: Game<CompileGameState> = {
+	name: 'compile',
 
-	setup: (ctx): TemplateGameState => {
-		const players: Record<string, { color: PlayerColor; score: number; gold: number }> = {};
-		for (let i = 0; i < ctx.numPlayers; i++) {
-			players[String(i)] = {
-				color: PLAYER_COLORS[i % PLAYER_COLORS.length],
-				score: 0,
-				gold: 0,
-			};
+	setup,
+
+	phases: {
+		draft: {
+			start: true,
+			next: 'play',
+			turn: {
+				order: {
+					first: () => 0,
+					next: ({ ctx }) => {
+						const pos = ctx.playOrderPos ?? 0;
+						if (pos >= DRAFT_ORDER.length - 1) return undefined;
+						return pos + 1;
+					},
+					playOrder: () => [...DRAFT_ORDER],
+				},
+				minMoves: 1,
+				maxMoves: 1,
+			},
+			moves: {
+				draftProtocol,
+			},
+		},
+		play: {
+			onBegin: onPlayPhaseBegin,
+			turn: {
+				minMoves: 1,
+				maxMoves: 1,
+			},
+			moves: {
+				playCommandCard,
+			},
+		},
+	},
+	// First player to have all 3 protocol cards compiled (column total >= 10 in each column) wins.
+	endIf: ({ G }) => {
+		if (!G.columns?.length) return undefined;
+		for (const playerId of ['0', '1'] as const) {
+			const p = playerId === '0' ? 0 : 1;
+			const allCompiled = G.columns.every((col) => col.protocolCompiled?.[p]);
+			if (allCompiled) return { winner: playerId };
 		}
-		return {
-			board: createEmptyBoard(),
-			players,
-			endGameScored: false,
-			endGameScoreBreakdown: {},
-			history: [],
-		};
-	},
-
-	moves: {
-		setPlayerColor: ({ G, ctx }: { G: TemplateGameState; ctx: Ctx }, color: PlayerColor) => {
-			if (!PLAYER_COLORS.includes(color)) return INVALID_MOVE;
-			const pid = ctx.playerID;
-			if (pid && G.players[pid]) {
-				G.players[pid].color = color;
-			}
-		},
-		placePiece: ({ G, ctx }: { G: TemplateGameState; ctx: Ctx }, row: number, col: number) => {
-			if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) return INVALID_MOVE;
-			if (G.board[row][col] !== null) return INVALID_MOVE;
-			G.board[row][col] = ctx.currentPlayer;
-			if (isBoardFull(G)) {
-				performEndGameScoring(G);
-			}
-		},
-		takeGold: ({ G, ctx }: { G: TemplateGameState; ctx: Ctx }) => {
-			G.players[ctx.currentPlayer].gold += 3;
-			if (isBoardFull(G)) {
-				performEndGameScoring(G);
-			}
-		},
-	},
-
-	endIf: ({ G }: { G: TemplateGameState }) => {
-		if (!G.endGameScored) return undefined;
-		const pids = Object.keys(G.players);
-		const scores = pids.map((pid) => G.players[pid].score);
-		const maxScore = Math.max(...scores);
-		const winners = pids.filter((pid) => G.players[pid].score === maxScore);
-		if (winners.length === 1) return { winner: winners[0] };
-		if (winners.length > 1) return { isDraw: true };
 		return undefined;
-	},
-
-	turn: {
-		minMoves: 1,
-		maxMoves: 1,
 	},
 };
 
@@ -132,40 +222,52 @@ export const TemplateGame: Game<TemplateGameState> = {
 // Definition
 // ---------------------------------------------------------------------------
 
-export const gameDef = defineGame<TemplateGameState>({
-	game: TemplateGame,
-	id: 'template-game',
-	displayName: 'Template Game',
-	description: 'A minimal Golden-Ages-style game: claim territory and collect gold. Replace with your own game.',
+export const gameDef = defineGame<CompileGameState>({
+	game: CompileGame,
+	id: 'compile',
+	displayName: 'Compile',
+	description: 'A 2-player card game: draft protocols, then play command cards to three columns.',
 	minPlayers: 2,
-	maxPlayers: 4,
+	maxPlayers: 2,
 
 	validateMove({ G, playerID, currentPlayer }, moveName, ...args) {
-		if (playerID !== currentPlayer && moveName !== 'setPlayerColor') return 'Not your turn';
-		if (moveName === 'setPlayerColor') {
-			const color = args[0];
-			if (!PLAYER_COLORS.includes(color as PlayerColor)) return 'Invalid color';
+		if (playerID !== currentPlayer) return 'Not your turn';
+		if (moveName === 'draftProtocol') {
+			const [poolIndex] = args as [number];
+			if (typeof poolIndex !== 'number' || poolIndex < 0 || poolIndex >= (G.protocolPool?.length ?? 0))
+				return 'Invalid protocol pick';
 			return true;
 		}
-		if (moveName === 'placePiece') {
-			const [row, col] = args as [number, number];
-			if (typeof row !== 'number' || typeof col !== 'number') return 'Invalid cell';
-			if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) return 'Out of bounds';
-			if (G.board[row][col] !== null) return 'Cell already claimed';
+		if (moveName === 'playCommandCard') {
+			const [columnIndex, handIndex, faceUp] = args as [number, number, boolean];
+			if (typeof columnIndex !== 'number' || columnIndex < 0 || columnIndex >= NUM_COLUMNS)
+				return 'Invalid column';
+			const player = G.players[playerID];
+			if (!player || handIndex < 0 || handIndex >= player.hand.length) return 'Invalid hand index';
+			if (typeof faceUp !== 'boolean') return 'faceUp must be boolean';
 			return true;
 		}
-		if (moveName === 'takeGold') return true;
 		return true;
 	},
-});
 
-/** Rankings for the final score table (by score desc). */
-export function getPlayerRankings(G: TemplateGameState): { playerId: string; score: number; cities: number }[] {
-	const rankings = Object.keys(G.players).map((pid) => ({
-		playerId: pid,
-		score: G.players[pid].score,
-		cities: 0,
-	}));
-	rankings.sort((a, b) => b.score - a.score);
-	return rankings;
-}
+	stripSecretInfo(G, playerID): BaseGameState {
+		const stripped = JSON.parse(JSON.stringify(G)) as CompileGameState;
+		if (playerID == null) return stripped;
+		const otherId = playerID === '0' ? '1' : '0';
+		// Hide opponent's hand
+		stripped.players[otherId] = {
+			...stripped.players[otherId],
+			hand: redactCards(stripped.players[otherId].hand as VisibleCard[]),
+		};
+		// Hide face-down cards owned by opponent
+		for (const col of stripped.columns) {
+			col.commandStack = col.commandStack.map((entry) => {
+				if (entry.owner === otherId && !entry.faceUp) {
+					return { cardId: '[hidden]', owner: entry.owner, faceUp: false, value: 0 };
+				}
+				return entry;
+			});
+		}
+		return stripped;
+	},
+});

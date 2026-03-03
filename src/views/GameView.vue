@@ -2,32 +2,20 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useGame, useTurnNotifications, loadSession, clearSession } from "@engine/client/index";
-import { gameDef, type TemplateGameState } from "../logic/game-logic";
+import { gameDef, type CompileGameState } from "../logic/game-logic";
 import { useBotPlayers } from "../composables/useBotPlayers";
 import GameBoard from "../components/GameBoard.vue";
+import DraftProtocol from "../components/DraftProtocol.vue";
 import { SERVER_URL } from "../config";
 import { deleteServerSession, voteToAbandon, cancelAbandonVote, getAbandonVoteStatus, type AbandonVoteStatus } from "../composables/useAuth";
 
 const props = defineProps<{ matchID: string; playerID: string }>();
 const router = useRouter();
 
-const { isConnected, isMyTurn, state, currentPlayer, gameover, reconnecting, connect, disconnect, playerID, move } = useGame();
+const { isConnected, isMyTurn, state, gameover, reconnecting, connect, disconnect, playerID, ctx } = useGame();
 
-const G = computed(() => state.value as unknown as TemplateGameState | undefined);
-
-const PLAYER_COLOR_BADGE: Record<string, string> = {
-	red: "bg-red-900/40 text-red-300",
-	blue: "bg-blue-900/40 text-blue-300",
-	green: "bg-green-900/40 text-green-300",
-	yellow: "bg-yellow-900/40 text-yellow-300",
-};
-
-const currentPlayerColor = computed(() => {
-	if (!G.value?.players) return null;
-	const cp = currentPlayer.value;
-	if (!cp) return null;
-	return G.value.players[cp]?.color ?? null;
-});
+const G = computed(() => state.value as unknown as CompileGameState | undefined);
+const phase = computed(() => ctx.value?.phase ?? "");
 
 const {
 	requestPermission: requestTurnNotifications,
@@ -96,50 +84,6 @@ watch(
 
 const confirmingAbandon = ref(false);
 const gameMenuOpen = ref(false);
-const hasAppliedSessionColor = ref(false);
-let sessionColorRetryTimer: ReturnType<typeof setTimeout> | null = null;
-const SESSION_COLOR_RETRY_MAX = 6;
-const SESSION_COLOR_RETRY_MS = 350;
-
-function tryApplySessionColor(attempt = 0) {
-	if (hasAppliedSessionColor.value || gameover.value) return;
-	const pid = playerID.value;
-	if (!pid || !isConnected.value) return;
-	const g = G.value;
-	const p = g?.players?.[pid];
-	if (!p) return;
-	const session = loadSession(gameDef.id, props.matchID) as { playerColor?: string } | undefined;
-	if (!session?.playerColor) return;
-	if (p.color === session.playerColor) {
-		hasAppliedSessionColor.value = true;
-		return;
-	}
-	move("setPlayerColor", session.playerColor);
-	if (attempt < SESSION_COLOR_RETRY_MAX) {
-		sessionColorRetryTimer = setTimeout(() => tryApplySessionColor(attempt + 1), SESSION_COLOR_RETRY_MS);
-	}
-}
-
-watch(
-	[() => G.value?.players, playerID, isConnected],
-	([players, pid, connected]) => {
-		if (!connected || hasAppliedSessionColor.value || gameover.value || !pid) return;
-		const p = (players as TemplateGameState["players"])?.[pid as string];
-		if (!p) return;
-		const session = loadSession(gameDef.id, props.matchID) as { playerColor?: string } | undefined;
-		if (!session?.playerColor) return;
-		if (p.color === session.playerColor) {
-			hasAppliedSessionColor.value = true;
-			return;
-		}
-		if (sessionColorRetryTimer) return;
-		sessionColorRetryTimer = setTimeout(() => {
-			sessionColorRetryTimer = null;
-			tryApplySessionColor(0);
-		}, 200);
-	},
-	{ immediate: true },
-);
 
 function closeGameMenu() {
 	gameMenuOpen.value = false;
@@ -205,11 +149,10 @@ onMounted(() => {
 	setTimeout(() => requestTurnNotifications(), 2000);
 });
 
-watch([isMyTurn, currentPlayerColor], () => nextTick(measureHeader));
+watch(isMyTurn, () => nextTick(measureHeader));
 
 onUnmounted(() => {
 	if (cueTimeout) clearTimeout(cueTimeout);
-	if (sessionColorRetryTimer) clearTimeout(sessionColorRetryTimer);
 	disconnect();
 	stopVotePolling();
 	document.removeEventListener("click", onClickOutsideMenu);
@@ -347,14 +290,8 @@ async function abandonGame() {
 						<template v-if="isMyTurn">
 							<span class="text-emerald-400 font-medium animate-pulse">Your turn</span>
 						</template>
-						<template v-else-if="currentPlayerColor">
-							<span
-								class="px-1.5 py-0.5 rounded text-[10px] md:text-xs font-medium leading-none"
-								:class="PLAYER_COLOR_BADGE[currentPlayerColor] ?? 'bg-slate-800/60 text-slate-200'"
-							>
-								<span class="capitalize">{{ currentPlayerColor }}</span
-								>'s turn
-							</span>
+						<template v-else>
+							<span class="text-slate-400">Opponent's turn</span>
 						</template>
 					</div>
 				</div>
@@ -399,7 +336,9 @@ async function abandonGame() {
 				<p class="text-slate-400">Reconnecting...</p>
 			</div>
 
-			<GameBoard v-if="!reconnecting" :header-height="headerHeight" @back-to-lobby="router.push('/')" />
+			<DraftProtocol v-if="!reconnecting && phase === 'draft'" />
+			<GameBoard v-else-if="!reconnecting && phase === 'play'" :header-height="headerHeight" @back-to-lobby="router.push('/')" />
+			<div v-else-if="!reconnecting" class="text-center text-slate-400">Loading game...</div>
 		</div>
 
 		<Teleport to="body">

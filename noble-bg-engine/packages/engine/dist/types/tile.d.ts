@@ -42,4 +42,3 @@ export interface TileLayer {
     /** Maps `"row,col"` -> tile ID for quick cell-to-tile lookups. */
     occupancy: Record<string, string>;
 }
-//# sourceMappingURL=tile.d.ts.map

@@ -13,4 +13,3 @@ export type { TileShape, TileRotation, PlacedTile, TileLayer } from './types/ind
 export { defineTileShape, rotateTileOffsets, getCellKey, createTileLayer, canPlaceTile, placeTile, getTileAt, getTileCells, STANDARD_TILE_SHAPES, } from './utils/tile-utils.js';
 export { prepareGame } from './prepare.js';
 export { gameRegistry, gameMap, registerGame } from './games/registry.js';
-//# sourceMappingURL=index.d.ts.map

@@ -48,4 +48,3 @@ export declare function findPiecesHex<P extends GamePiece>(board: HexBoard<P>, p
     r: number;
     piece: P;
 }[];
-//# sourceMappingURL=board-utils.d.ts.map
