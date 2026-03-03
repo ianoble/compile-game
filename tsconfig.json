@@ -14,8 +14,8 @@
 		"baseUrl": ".",
 		"paths": {
 			"@/*": ["src/*"],
-			"@engine/client": ["../noble-bg-engine/packages/engine/src/client/index.ts"],
-			"@engine/*": ["../noble-bg-engine/packages/engine/src/*"]
+			"@engine/client": ["noble-bg-engine/packages/engine/src/client/index.ts"],
+			"@engine/*": ["noble-bg-engine/packages/engine/src/*"]
 		}
 	},
 	"include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.vue"]

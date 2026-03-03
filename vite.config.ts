@@ -12,8 +12,8 @@ export default defineConfig({
 		dedupe: ['vue', 'pinia'],
 		alias: {
 			'@': path.resolve(__dirname, './src'),
-			'@engine': path.resolve(__dirname, '../noble-bg-engine/packages/engine/src'),
-			'@engine/client': path.resolve(__dirname, '../noble-bg-engine/packages/engine/src/client/index'),
+			'@engine': path.resolve(__dirname, 'noble-bg-engine/packages/engine/src'),
+			'@engine/client': path.resolve(__dirname, 'noble-bg-engine/packages/engine/src/client/index'),
 		},
 	},
 	// Development server configuration

@@ -9,11 +9,12 @@
 	},
 	"scripts": {
 		"dev": "vite",
-		"build": "vite build",
+		"build:engine": "npx tsc --project noble-bg-engine/packages/engine/tsconfig.json",
+		"build": "npm run build:engine && vite build",
 		"preview": "vite preview"
 	},
 	"dependencies": {
-		"@noble/bg-engine": "file:../noble-bg-engine/packages/engine",
+		"@noble/bg-engine": "file:noble-bg-engine/packages/engine",
 		"boardgame.io": "^0.50.2",
 		"pinia": "^2.3.0",
 		"vue": "^3.5.0",
