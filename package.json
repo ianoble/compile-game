@@ -10,7 +10,7 @@
 	"scripts": {
 		"dev": "vite",
 		"build:engine": "npx tsc --project noble-bg-engine/packages/engine/tsconfig.json",
-		"build": "npm run build:engine && vite build",
+		"build": "vite build",
 		"preview": "vite preview"
 	},
 	"dependencies": {
