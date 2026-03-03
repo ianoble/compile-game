@@ -1,10 +1,12 @@
 {
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "outDir": "dist",
-    "rootDir": "src",
-    "composite": true
-  },
-  "include": ["src"],
-  "exclude": ["src/client"]
+	"extends": "../../../tsconfig.json",
+	"compilerOptions": {
+		"outDir": "dist",
+		"rootDir": "src",
+		"composite": true,
+		"emitDeclarationOnly": false,
+		"noEmit": false
+	},
+	"include": ["src"],
+	"exclude": ["src/client"]
 }
