@@ -1,6 +1,6 @@
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
-import { registerGame } from '@engine/client';
+import { registerGame } from '@engine/client/index';
 import App from './App.vue';
 import { router } from './router';
 import { gameDef } from './logic/game-logic';

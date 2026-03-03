@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
-import { saveSession, loadSession, clearSession } from "@engine/client";
+import { saveSession, loadSession, clearSession } from "@engine/client/index";
 import { gameDef, PLAYER_COLORS, type PlayerColor } from "../logic/game-logic";
 import { SERVER_URL } from "../config";
 import { useAuth, authHeaders, syncSessionToServer, deleteServerSession, fetchServerSessions } from "../composables/useAuth";
@@ -20,9 +20,7 @@ const authName = ref("");
 const authPin = ref("");
 
 async function handleAuth() {
-	const ok = authMode.value === "register"
-		? await register(authName.value, authPin.value)
-		: await login(authName.value, authPin.value);
+	const ok = authMode.value === "register" ? await register(authName.value, authPin.value) : await login(authName.value, authPin.value);
 	if (ok) {
 		authName.value = "";
 		authPin.value = "";
@@ -102,9 +100,7 @@ function buildDefaultSetupData(): Record<string, unknown> {
 const setupData = ref<Record<string, unknown>>(buildDefaultSetupData());
 
 const BASE_MAX_PLAYERS = 4;
-const effectiveMaxPlayers = computed(() =>
-	setupData.value.expansion ? gameDef.maxPlayers : Math.min(gameDef.maxPlayers, BASE_MAX_PLAYERS),
-);
+const effectiveMaxPlayers = computed(() => (setupData.value.expansion ? gameDef.maxPlayers : Math.min(gameDef.maxPlayers, BASE_MAX_PLAYERS)));
 watch(effectiveMaxPlayers, (max) => {
 	if (numPlayers.value > max) numPlayers.value = max;
 });
@@ -117,9 +113,7 @@ const joinModalMatchID = ref<string | null>(null);
 const joinModalColor = ref<PlayerColor>("red");
 function openJoinModal(game: MatchInfo) {
 	joinModalMatchID.value = game.matchID;
-	const taken = new Set(
-		game.players.map((p) => p.data?.color).filter(Boolean) as string[],
-	);
+	const taken = new Set(game.players.map((p) => p.data?.color).filter(Boolean) as string[]);
 	const available = PLAYER_COLORS.filter((c) => !taken.has(c));
 	joinModalColor.value = (available[0] as PlayerColor) ?? "red";
 }
@@ -129,9 +123,7 @@ function closeJoinModal() {
 const joinModalAvailableColors = computed(() => {
 	if (!joinModalMatchID.value) return [];
 	const game = openGames.value.find((g) => g.matchID === joinModalMatchID.value);
-	const taken = new Set(
-		(game?.players ?? []).map((p) => p.data?.color).filter(Boolean) as string[],
-	);
+	const taken = new Set((game?.players ?? []).map((p) => p.data?.color).filter(Boolean) as string[]);
 	return PLAYER_COLORS.filter((c) => !taken.has(c));
 });
 
@@ -356,7 +348,9 @@ async function abandonGame(matchID: string) {
 						headers: { "Content-Type": "application/json" },
 						body: JSON.stringify({ playerID: botPid, credentials: botCreds[botPid] }),
 					});
-				} catch { /* best effort */ }
+				} catch {
+					/* best effort */
+				}
 			}
 			localStorage.removeItem(botCredsKey);
 		}
@@ -539,7 +533,9 @@ onUnmounted(stopPolling);
 						<p class="mt-2 text-slate-400">{{ gameDef.description }}</p>
 					</div>
 					<div v-if="isLoggedIn" class="flex items-center gap-3 shrink-0">
-						<span class="text-sm text-slate-400">Signed in as <strong class="text-white">{{ playerName }}</strong></span>
+						<span class="text-sm text-slate-400"
+							>Signed in as <strong class="text-white">{{ playerName }}</strong></span
+						>
 						<button
 							class="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-300 border border-slate-700 hover:border-slate-600 rounded-lg transition-colors"
 							@click="handleLogout"
@@ -553,14 +549,15 @@ onUnmounted(stopPolling);
 
 		<!-- Main content -->
 		<main class="max-w-5xl mx-auto px-6 py-8">
-
 			<!-- Auth gate -->
 			<template v-if="!isLoggedIn">
 				<div class="max-w-sm mx-auto mt-8 space-y-6">
 					<div class="text-center">
-						<h2 class="text-xl font-semibold">{{ authMode === 'login' ? 'Sign In' : 'Create Account' }}</h2>
+						<h2 class="text-xl font-semibold">{{ authMode === "login" ? "Sign In" : "Create Account" }}</h2>
 						<p class="mt-1 text-sm text-slate-400">
-							{{ authMode === 'login' ? 'Sign in to create and rejoin games from any device.' : 'Pick a name and a PIN to get started.' }}
+							{{
+								authMode === "login" ? "Sign in to create and rejoin games from any device." : "Pick a name and a PIN to get started."
+							}}
 						</p>
 					</div>
 
@@ -595,17 +592,33 @@ onUnmounted(stopPolling);
 						:disabled="authLoading || !authName.trim() || authPin.length < 4"
 						@click="handleAuth"
 					>
-						{{ authLoading ? 'Please wait...' : (authMode === 'login' ? 'Sign In' : 'Create Account') }}
+						{{ authLoading ? "Please wait..." : authMode === "login" ? "Sign In" : "Create Account" }}
 					</button>
 
 					<p class="text-center text-sm text-slate-500">
 						<template v-if="authMode === 'login'">
 							Don't have an account?
-							<button class="text-blue-400 hover:text-blue-300 font-medium" @click="authMode = 'register'; loginError = ''">Create one</button>
+							<button
+								class="text-blue-400 hover:text-blue-300 font-medium"
+								@click="
+									authMode = 'register';
+									loginError = '';
+								"
+							>
+								Create one
+							</button>
 						</template>
 						<template v-else>
 							Already have an account?
-							<button class="text-blue-400 hover:text-blue-300 font-medium" @click="authMode = 'login'; loginError = ''">Sign in</button>
+							<button
+								class="text-blue-400 hover:text-blue-300 font-medium"
+								@click="
+									authMode = 'login';
+									loginError = '';
+								"
+							>
+								Sign in
+							</button>
 						</template>
 					</p>
 				</div>
@@ -613,300 +626,316 @@ onUnmounted(stopPolling);
 
 			<!-- Logged-in content -->
 			<template v-else>
-			<!-- Error banner -->
-			<div
-				v-if="errorMsg"
-				class="mb-6 p-3 bg-red-900/30 border border-red-800 rounded-lg text-sm text-red-400 flex items-center justify-between"
-			>
-				<span>{{ errorMsg }}</span>
-				<button class="text-red-400 hover:text-red-300 ml-4" @click="errorMsg = ''">Dismiss</button>
-			</div>
-
-			<!-- Loading -->
-			<div v-if="loading" class="text-center py-16">
-				<p class="text-slate-400">Connecting to server...</p>
-			</div>
-
-			<!-- BROWSE MODE -->
-			<template v-else-if="viewMode === 'browse'">
-				<!-- Create game button -->
-				<div class="mb-8">
-					<button
-						v-if="!showCreateForm"
-						class="px-6 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold transition-colors"
-						@click="showCreateForm = true"
-					>
-						Create New Game
-					</button>
-
-					<!-- Create form (inline) -->
-					<div v-else class="p-5 bg-slate-800 border border-slate-700 rounded-xl max-w-md space-y-4">
-						<h3 class="font-semibold">New Game</h3>
-
-						<div class="space-y-2">
-							<label class="block text-sm text-slate-400">Number of Players</label>
-							<div class="flex items-center gap-3">
-								<button
-									class="w-9 h-9 rounded-lg bg-slate-700 border border-slate-600 text-lg font-bold hover:bg-slate-600 transition-colors disabled:opacity-40"
-									:disabled="numPlayers <= gameDef.minPlayers"
-									@click="numPlayers--"
-								>
-									-
-								</button>
-								<span class="text-xl font-bold w-6 text-center">{{ numPlayers }}</span>
-								<button
-									class="w-9 h-9 rounded-lg bg-slate-700 border border-slate-600 text-lg font-bold hover:bg-slate-600 transition-colors disabled:opacity-40"
-								:disabled="numPlayers >= effectiveMaxPlayers"
-								@click="numPlayers++"
-							>
-								+
-							</button>
-							<span class="text-sm text-slate-500 ml-1">({{ gameDef.minPlayers }}&ndash;{{ effectiveMaxPlayers }})</span>
-							</div>
-						</div>
-
-						<!-- Setup options (driven by gameDef.setupOptions) -->
-						<template v-if="gameDef.setupOptions?.length">
-							<div v-for="opt in gameDef.setupOptions" :key="opt.id" class="space-y-1">
-								<label v-if="opt.type === 'boolean'" class="flex items-center gap-3 cursor-pointer select-none">
-									<button
-										type="button"
-										role="switch"
-										:aria-checked="!!setupData[opt.id]"
-										class="relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-800"
-										:class="setupData[opt.id] ? 'bg-blue-600' : 'bg-slate-600'"
-										@click="setupData[opt.id] = !setupData[opt.id]"
-									>
-										<span
-											class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform"
-											:class="setupData[opt.id] ? 'translate-x-5' : 'translate-x-0'"
-										/>
-									</button>
-									<span class="text-sm font-medium">{{ opt.label }}</span>
-								</label>
-								<p v-if="opt.description" class="text-xs text-slate-500 ml-14">{{ opt.description }}</p>
-							</div>
-						</template>
-
-						<!-- Your color (when creating) -->
-						<div class="space-y-2">
-							<label class="block text-sm text-slate-400">Your color</label>
-							<div class="flex flex-wrap gap-2">
-								<button
-									v-for="c in PLAYER_COLORS"
-									:key="c"
-									type="button"
-									class="w-9 h-9 rounded-full border-2 transition-all shrink-0"
-									:class="[
-										selectedColor === c ? 'border-white scale-110 ring-2 ring-white/50' : 'border-slate-600 hover:border-slate-500',
-										{ red: 'bg-red-500', blue: 'bg-blue-500', green: 'bg-green-500', yellow: 'bg-yellow-400', black: 'bg-slate-700' }[c],
-									]"
-									:title="c"
-									@click="selectedColor = c"
-								/>
-							</div>
-						</div>
-
-						<div class="flex gap-2">
-							<button
-								class="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold text-sm transition-colors disabled:opacity-50"
-								:disabled="creating"
-								@click="createMatch"
-							>
-								{{ creating ? "Creating..." : "Create" }}
-							</button>
-							<button
-								class="px-5 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium transition-colors"
-								@click="showCreateForm = false"
-							>
-								Cancel
-							</button>
-						</div>
-					</div>
+				<!-- Error banner -->
+				<div
+					v-if="errorMsg"
+					class="mb-6 p-3 bg-red-900/30 border border-red-800 rounded-lg text-sm text-red-400 flex items-center justify-between"
+				>
+					<span>{{ errorMsg }}</span>
+					<button class="text-red-400 hover:text-red-300 ml-4" @click="errorMsg = ''">Dismiss</button>
 				</div>
 
-				<!-- Two-column layout -->
-				<div class="grid md:grid-cols-2 gap-8">
-					<!-- Your Games -->
-					<section>
-						<h2 class="text-lg font-semibold mb-4 text-slate-300">Your Games</h2>
+				<!-- Loading -->
+				<div v-if="loading" class="text-center py-16">
+					<p class="text-slate-400">Connecting to server...</p>
+				</div>
 
-						<div v-if="myGames.length === 0" class="p-6 bg-slate-800/50 border border-slate-700/50 rounded-xl text-center">
-							<p class="text-slate-500 text-sm">No active games yet. Create or join one!</p>
-						</div>
+				<!-- BROWSE MODE -->
+				<template v-else-if="viewMode === 'browse'">
+					<!-- Create game button -->
+					<div class="mb-8">
+						<button
+							v-if="!showCreateForm"
+							class="px-6 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold transition-colors"
+							@click="showCreateForm = true"
+						>
+							Create New Game
+						</button>
 
-						<div v-else class="space-y-3">
-							<div v-for="game in myGames" :key="game.matchID" class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
-								<div class="p-4">
-									<div class="flex items-center gap-2 mb-1">
-										<span
-											class="inline-block w-2 h-2 rounded-full"
-											:class="{
-												'bg-yellow-400': matchStatus(game) === 'waiting',
-												'bg-green-400': matchStatus(game) === 'playing',
-												'bg-slate-500': matchStatus(game) === 'finished',
-											}"
-										/>
-										<span class="text-sm font-medium capitalize">{{ matchStatus(game) }}</span>
-										<span class="text-xs text-slate-500 ml-auto">{{ seatSummary(game.players) }} players</span>
-									</div>
-									<p class="text-xs text-slate-500 mt-1">
-										{{
-											game.players
-												.filter((p) => p.name)
-												.map((p) => p.name)
-												.join(", ")
-										}}
-									</p>
-								</div>
-								<div class="flex border-t border-slate-700 divide-x divide-slate-700">
+						<!-- Create form (inline) -->
+						<div v-else class="p-5 bg-slate-800 border border-slate-700 rounded-xl max-w-md space-y-4">
+							<h3 class="font-semibold">New Game</h3>
+
+							<div class="space-y-2">
+								<label class="block text-sm text-slate-400">Number of Players</label>
+								<div class="flex items-center gap-3">
 									<button
-										class="flex-1 px-3 py-2 text-xs font-medium text-blue-400 hover:bg-slate-700/50 transition-colors"
-										@click="router.push(`/game/${game.matchID}/${game.myPlayerID}`)"
+										class="w-9 h-9 rounded-lg bg-slate-700 border border-slate-600 text-lg font-bold hover:bg-slate-600 transition-colors disabled:opacity-40"
+										:disabled="numPlayers <= gameDef.minPlayers"
+										@click="numPlayers--"
 									>
-										Resume
+										-
 									</button>
+									<span class="text-xl font-bold w-6 text-center">{{ numPlayers }}</span>
 									<button
-										v-if="matchStatus(game) === 'waiting' && game.myPlayerID === '0'"
-										class="flex-1 px-3 py-2 text-xs font-medium text-slate-400 hover:bg-slate-700/50 transition-colors"
-										@click="fillBotsForGame(game.matchID)"
+										class="w-9 h-9 rounded-lg bg-slate-700 border border-slate-600 text-lg font-bold hover:bg-slate-600 transition-colors disabled:opacity-40"
+										:disabled="numPlayers >= effectiveMaxPlayers"
+										@click="numPlayers++"
 									>
-										Add Bots
+										+
 									</button>
-									<button
-										v-if="game.myPlayerID === '0'"
-										class="flex-1 px-3 py-2 text-xs font-medium text-red-400/70 hover:bg-red-900/20 hover:text-red-400 transition-colors"
-										@click="abandonGame(game.matchID)"
-									>
-										Abandon
-									</button>
+									<span class="text-sm text-slate-500 ml-1">({{ gameDef.minPlayers }}&ndash;{{ effectiveMaxPlayers }})</span>
 								</div>
 							</div>
+
+							<!-- Setup options (driven by gameDef.setupOptions) -->
+							<template v-if="gameDef.setupOptions?.length">
+								<div v-for="opt in gameDef.setupOptions" :key="opt.id" class="space-y-1">
+									<label v-if="opt.type === 'boolean'" class="flex items-center gap-3 cursor-pointer select-none">
+										<button
+											type="button"
+											role="switch"
+											:aria-checked="!!setupData[opt.id]"
+											class="relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-800"
+											:class="setupData[opt.id] ? 'bg-blue-600' : 'bg-slate-600'"
+											@click="setupData[opt.id] = !setupData[opt.id]"
+										>
+											<span
+												class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform"
+												:class="setupData[opt.id] ? 'translate-x-5' : 'translate-x-0'"
+											/>
+										</button>
+										<span class="text-sm font-medium">{{ opt.label }}</span>
+									</label>
+									<p v-if="opt.description" class="text-xs text-slate-500 ml-14">{{ opt.description }}</p>
+								</div>
+							</template>
+
+							<!-- Your color (when creating) -->
+							<div class="space-y-2">
+								<label class="block text-sm text-slate-400">Your color</label>
+								<div class="flex flex-wrap gap-2">
+									<button
+										v-for="c in PLAYER_COLORS"
+										:key="c"
+										type="button"
+										class="w-9 h-9 rounded-full border-2 transition-all shrink-0"
+										:class="[
+											selectedColor === c
+												? 'border-white scale-110 ring-2 ring-white/50'
+												: 'border-slate-600 hover:border-slate-500',
+											{
+												red: 'bg-red-500',
+												blue: 'bg-blue-500',
+												green: 'bg-green-500',
+												yellow: 'bg-yellow-400',
+												black: 'bg-slate-700',
+											}[c],
+										]"
+										:title="c"
+										@click="selectedColor = c"
+									/>
+								</div>
+							</div>
+
+							<div class="flex gap-2">
+								<button
+									class="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold text-sm transition-colors disabled:opacity-50"
+									:disabled="creating"
+									@click="createMatch"
+								>
+									{{ creating ? "Creating..." : "Create" }}
+								</button>
+								<button
+									class="px-5 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium transition-colors"
+									@click="showCreateForm = false"
+								>
+									Cancel
+								</button>
+							</div>
 						</div>
-					</section>
+					</div>
 
-					<!-- Open Games -->
-					<section>
-						<h2 class="text-lg font-semibold mb-4 text-slate-300">Open Games</h2>
+					<!-- Two-column layout -->
+					<div class="grid md:grid-cols-2 gap-8">
+						<!-- Your Games -->
+						<section>
+							<h2 class="text-lg font-semibold mb-4 text-slate-300">Your Games</h2>
 
-						<div v-if="openGames.length === 0" class="p-6 bg-slate-800/50 border border-slate-700/50 rounded-xl text-center">
-							<p class="text-slate-500 text-sm">No open games right now.</p>
-						</div>
+							<div v-if="myGames.length === 0" class="p-6 bg-slate-800/50 border border-slate-700/50 rounded-xl text-center">
+								<p class="text-slate-500 text-sm">No active games yet. Create or join one!</p>
+							</div>
 
-						<div v-else class="space-y-3">
-							<div v-for="game in openGames" :key="game.matchID" class="p-4 bg-slate-800 border border-slate-700 rounded-xl">
-								<div class="flex items-center justify-between">
-									<div>
-										<p class="text-sm font-medium">{{ seatSummary(game.players) }} players</p>
-										<p class="text-xs text-slate-500 mt-0.5">
+							<div v-else class="space-y-3">
+								<div
+									v-for="game in myGames"
+									:key="game.matchID"
+									class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden"
+								>
+									<div class="p-4">
+										<div class="flex items-center gap-2 mb-1">
+											<span
+												class="inline-block w-2 h-2 rounded-full"
+												:class="{
+													'bg-yellow-400': matchStatus(game) === 'waiting',
+													'bg-green-400': matchStatus(game) === 'playing',
+													'bg-slate-500': matchStatus(game) === 'finished',
+												}"
+											/>
+											<span class="text-sm font-medium capitalize">{{ matchStatus(game) }}</span>
+											<span class="text-xs text-slate-500 ml-auto">{{ seatSummary(game.players) }} players</span>
+										</div>
+										<p class="text-xs text-slate-500 mt-1">
 											{{
 												game.players
 													.filter((p) => p.name)
 													.map((p) => p.name)
-													.join(", ") || "No players yet"
+													.join(", ")
 											}}
 										</p>
 									</div>
-								<button
-									class="px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-sm font-semibold transition-colors"
-									@click="openJoinModal(game)"
-								>
-									Join
-								</button>
+									<div class="flex border-t border-slate-700 divide-x divide-slate-700">
+										<button
+											class="flex-1 px-3 py-2 text-xs font-medium text-blue-400 hover:bg-slate-700/50 transition-colors"
+											@click="router.push(`/game/${game.matchID}/${game.myPlayerID}`)"
+										>
+											Resume
+										</button>
+										<button
+											v-if="matchStatus(game) === 'waiting' && game.myPlayerID === '0'"
+											class="flex-1 px-3 py-2 text-xs font-medium text-slate-400 hover:bg-slate-700/50 transition-colors"
+											@click="fillBotsForGame(game.matchID)"
+										>
+											Add Bots
+										</button>
+										<button
+											v-if="game.myPlayerID === '0'"
+											class="flex-1 px-3 py-2 text-xs font-medium text-red-400/70 hover:bg-red-900/20 hover:text-red-400 transition-colors"
+											@click="abandonGame(game.matchID)"
+										>
+											Abandon
+										</button>
+									</div>
+								</div>
+							</div>
+						</section>
+
+						<!-- Open Games -->
+						<section>
+							<h2 class="text-lg font-semibold mb-4 text-slate-300">Open Games</h2>
+
+							<div v-if="openGames.length === 0" class="p-6 bg-slate-800/50 border border-slate-700/50 rounded-xl text-center">
+								<p class="text-slate-500 text-sm">No open games right now.</p>
+							</div>
+
+							<div v-else class="space-y-3">
+								<div v-for="game in openGames" :key="game.matchID" class="p-4 bg-slate-800 border border-slate-700 rounded-xl">
+									<div class="flex items-center justify-between">
+										<div>
+											<p class="text-sm font-medium">{{ seatSummary(game.players) }} players</p>
+											<p class="text-xs text-slate-500 mt-0.5">
+												{{
+													game.players
+														.filter((p) => p.name)
+														.map((p) => p.name)
+														.join(", ") || "No players yet"
+												}}
+											</p>
+										</div>
+										<button
+											class="px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-sm font-semibold transition-colors"
+											@click="openJoinModal(game)"
+										>
+											Join
+										</button>
+									</div>
+								</div>
+							</div>
+						</section>
+					</div>
+				</template>
+
+				<!-- HOSTING MODE (waiting room) -->
+				<template v-else-if="viewMode === 'hosting'">
+					<button class="mb-6 text-sm text-slate-500 hover:text-slate-300 transition-colors" @click="backToBrowse">
+						&larr; Back to lobby
+					</button>
+
+					<div class="max-w-md mx-auto space-y-6">
+						<div class="p-5 bg-slate-800 border border-slate-700 rounded-xl space-y-4">
+							<div class="flex items-center gap-2">
+								<span class="inline-block w-2 h-2 rounded-full bg-green-400" />
+								<h3 class="font-semibold">Game Created</h3>
+							</div>
+
+							<div class="space-y-1">
+								<label class="block text-xs text-slate-500">Invite Link</label>
+								<div class="flex gap-2">
+									<code class="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-blue-400 truncate">
+										{{ inviteLink() }}
+									</code>
+									<button
+										class="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium transition-colors shrink-0"
+										@click="copyLink"
+									>
+										{{ linkCopied ? "Copied!" : "Copy" }}
+									</button>
 								</div>
 							</div>
 						</div>
-					</section>
-				</div>
-			</template>
 
-			<!-- HOSTING MODE (waiting room) -->
-			<template v-else-if="viewMode === 'hosting'">
-				<button class="mb-6 text-sm text-slate-500 hover:text-slate-300 transition-colors" @click="backToBrowse">&larr; Back to lobby</button>
-
-				<div class="max-w-md mx-auto space-y-6">
-					<div class="p-5 bg-slate-800 border border-slate-700 rounded-xl space-y-4">
-						<div class="flex items-center gap-2">
-							<span class="inline-block w-2 h-2 rounded-full bg-green-400" />
-							<h3 class="font-semibold">Game Created</h3>
-						</div>
-
-						<div class="space-y-1">
-							<label class="block text-xs text-slate-500">Invite Link</label>
-							<div class="flex gap-2">
-								<code class="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-blue-400 truncate">
-									{{ inviteLink() }}
-								</code>
-								<button
-									class="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium transition-colors shrink-0"
-									@click="copyLink"
-								>
-									{{ linkCopied ? "Copied!" : "Copy" }}
-								</button>
+						<div class="p-5 bg-slate-800 border border-slate-700 rounded-xl space-y-3">
+							<div class="flex items-center justify-between">
+								<span class="text-sm font-medium text-slate-400">Players</span>
+								<span class="text-sm text-slate-500">{{ filledCount }} / {{ hostedPlayers.length }}</span>
 							</div>
+							<ul class="space-y-2">
+								<li v-for="p in hostedPlayers" :key="p.id" class="flex items-center gap-3 px-3 py-2.5 bg-slate-900 rounded-lg">
+									<span
+										class="w-2 h-2 rounded-full shrink-0"
+										:class="
+											!p.name
+												? 'bg-slate-600'
+												: ((
+														{
+															red: 'bg-red-500',
+															blue: 'bg-blue-500',
+															green: 'bg-green-500',
+															yellow: 'bg-yellow-400',
+															black: 'bg-slate-700',
+														} as Record<string, string>
+													)[p.data?.color ?? ''] ?? 'bg-green-400')
+										"
+									/>
+									<span class="text-sm" :class="p.name ? 'text-white' : 'text-slate-600'">
+										{{ p.name || "Waiting..." }}
+									</span>
+									<span v-if="p.id === 0" class="ml-auto text-xs text-slate-500">Host</span>
+								</li>
+							</ul>
+						</div>
+
+						<button
+							class="w-full py-3 bg-green-600 hover:bg-green-500 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+							:disabled="!allSeatsFilled"
+							@click="startGame"
+						>
+							{{ allSeatsFilled ? "Start Game" : `Waiting for players (${filledCount}/${hostedPlayers.length})...` }}
+						</button>
+
+						<div v-if="!allSeatsFilled" class="flex gap-2">
+							<button
+								class="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-sm text-slate-400 hover:text-white font-medium transition-colors disabled:opacity-50"
+								:disabled="fillingBots"
+								@click="fillWithBots"
+							>
+								{{ fillingBots ? "Adding..." : "Fill with Bots" }}
+							</button>
+							<button
+								class="flex-1 py-2.5 bg-slate-800 hover:bg-red-900/40 border border-slate-700 hover:border-red-800 rounded-lg text-sm text-slate-400 hover:text-red-400 font-medium transition-colors"
+								@click="abandonHostedGame"
+							>
+								Abandon Game
+							</button>
 						</div>
 					</div>
-
-					<div class="p-5 bg-slate-800 border border-slate-700 rounded-xl space-y-3">
-						<div class="flex items-center justify-between">
-							<span class="text-sm font-medium text-slate-400">Players</span>
-							<span class="text-sm text-slate-500">{{ filledCount }} / {{ hostedPlayers.length }}</span>
-						</div>
-						<ul class="space-y-2">
-							<li v-for="p in hostedPlayers" :key="p.id" class="flex items-center gap-3 px-3 py-2.5 bg-slate-900 rounded-lg">
-								<span
-									class="w-2 h-2 rounded-full shrink-0"
-									:class="
-										!p.name
-											? 'bg-slate-600'
-											: ({ red: 'bg-red-500', blue: 'bg-blue-500', green: 'bg-green-500', yellow: 'bg-yellow-400', black: 'bg-slate-700' } as Record<string, string>)[
-													p.data?.color ?? ''
-												] ?? 'bg-green-400'
-									"
-								/>
-								<span class="text-sm" :class="p.name ? 'text-white' : 'text-slate-600'">
-									{{ p.name || "Waiting..." }}
-								</span>
-								<span v-if="p.id === 0" class="ml-auto text-xs text-slate-500">Host</span>
-							</li>
-						</ul>
-					</div>
-
-					<button
-						class="w-full py-3 bg-green-600 hover:bg-green-500 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-						:disabled="!allSeatsFilled"
-						@click="startGame"
-					>
-						{{ allSeatsFilled ? "Start Game" : `Waiting for players (${filledCount}/${hostedPlayers.length})...` }}
-					</button>
-
-					<div v-if="!allSeatsFilled" class="flex gap-2">
-						<button
-							class="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-sm text-slate-400 hover:text-white font-medium transition-colors disabled:opacity-50"
-							:disabled="fillingBots"
-							@click="fillWithBots"
-						>
-							{{ fillingBots ? "Adding..." : "Fill with Bots" }}
-						</button>
-						<button
-							class="flex-1 py-2.5 bg-slate-800 hover:bg-red-900/40 border border-slate-700 hover:border-red-800 rounded-lg text-sm text-slate-400 hover:text-red-400 font-medium transition-colors"
-							@click="abandonHostedGame"
-						>
-							Abandon Game
-						</button>
-					</div>
-				</div>
-			</template>
+				</template>
 			</template>
 		</main>
 
 		<!-- Join game: pick color -->
 		<Teleport to="body">
-			<div
-				v-if="joinModalMatchID"
-				class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-				@click.self="closeJoinModal"
-			>
+			<div v-if="joinModalMatchID" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" @click.self="closeJoinModal">
 				<div class="bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-xl max-w-sm w-full space-y-4">
 					<h3 class="text-lg font-semibold text-white">Pick your color</h3>
 					<div class="flex flex-wrap gap-2">

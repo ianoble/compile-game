@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from "vue";
-import { useGame } from "@engine/client";
+import { useGame } from "@engine/client/index";
 import { getPlayerRankings, BOARD_SIZE, type TemplateGameState } from "../logic/game-logic";
 
 defineProps<{ headerHeight: number }>();
@@ -71,10 +71,7 @@ function tickScoreReveal(timestamp: number) {
 	const rowIdx = Math.floor(currentIdx / numPlayers);
 	const colIdx = currentIdx % numPlayers;
 	const targetValue = rows[rowIdx]?.vpsByPlayer[finalRankings.value[colIdx]?.playerId ?? ""] ?? 0;
-	const duration = Math.min(
-		SCORE_CELL_MAX_MS,
-		Math.max(SCORE_CELL_MIN_MS, SCORE_CELL_DURATION_MS + targetValue * 12)
-	);
+	const duration = Math.min(SCORE_CELL_MAX_MS, Math.max(SCORE_CELL_MIN_MS, SCORE_CELL_DURATION_MS + targetValue * 12));
 	const progress = Math.min(1, elapsed / duration);
 	const easeOut = 1 - (1 - progress) * (1 - progress);
 	scoreRevealDisplayValue.value = Math.round(easeOut * targetValue);
@@ -104,14 +101,11 @@ function startScoreTableReveal() {
 	}
 }
 
-watch(
-	[gameIsOver, gameOverDismissed],
-	([over, dismissed]) => {
-		if (!over || dismissed) return;
-		const t = setTimeout(() => startScoreTableReveal(), 320);
-		return () => clearTimeout(t);
-	}
-);
+watch([gameIsOver, gameOverDismissed], ([over, dismissed]) => {
+	if (!over || dismissed) return;
+	const t = setTimeout(() => startScoreTableReveal(), 320);
+	return () => clearTimeout(t);
+});
 
 onUnmounted(() => {
 	if (scoreRevealRaf) cancelAnimationFrame(scoreRevealRaf);
@@ -135,11 +129,11 @@ const boardIndices = Array.from({ length: BOARD_SIZE }, (_, i) => i);
 
 <template>
 	<div class="w-full max-w-lg mx-auto space-y-6">
-		<p class="text-center text-slate-400 text-sm">
-			Claim cells or take gold. When the board is full, territory and gold score like Golden Ages.
-		</p>
+		<p class="text-center text-slate-400 text-sm">Claim cells or take gold. When the board is full, territory and gold score like Golden Ages.</p>
 		<div v-if="G?.players" class="flex justify-center gap-4 text-sm">
-			<span class="text-slate-400">Your gold: <strong class="text-amber-300 tabular-nums">{{ myGold }}</strong></span>
+			<span class="text-slate-400"
+				>Your gold: <strong class="text-amber-300 tabular-nums">{{ myGold }}</strong></span
+			>
 			<button
 				v-if="!gameIsOver && isMyTurn"
 				type="button"
@@ -160,7 +154,10 @@ const boardIndices = Array.from({ length: BOARD_SIZE }, (_, i) => i);
 						class="w-full h-full rounded-lg border-2 transition-colors flex items-center justify-center text-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed"
 						:class="
 							cellOwner(row, col)
-								? [PLAYER_COLOR_CLASSES[G?.players[cellOwner(row, col)!]?.color ?? ''] ?? 'bg-slate-600', 'border-slate-500 text-white']
+								? [
+										PLAYER_COLOR_CLASSES[G?.players[cellOwner(row, col)!]?.color ?? ''] ?? 'bg-slate-600',
+										'border-slate-500 text-white',
+									]
 								: isMyTurn && !gameIsOver
 									? 'bg-slate-800 border-slate-600 hover:bg-slate-700 hover:border-slate-500 text-slate-400'
 									: 'bg-slate-800/60 border-slate-700 text-slate-500'
@@ -168,7 +165,7 @@ const boardIndices = Array.from({ length: BOARD_SIZE }, (_, i) => i);
 						:disabled="!isMyTurn || gameIsOver || cellOwner(row, col) !== null"
 						@click="move('placePiece', row, col)"
 					>
-						{{ cellOwner(row, col) !== null ? (G?.players[cellOwner(row, col)!]?.color?.charAt(0) ?? '') : '' }}
+						{{ cellOwner(row, col) !== null ? (G?.players[cellOwner(row, col)!]?.color?.charAt(0) ?? "") : "" }}
 					</button>
 				</template>
 			</template>
@@ -176,10 +173,7 @@ const boardIndices = Array.from({ length: BOARD_SIZE }, (_, i) => i);
 	</div>
 
 	<!-- Game Over: score table with count-up animation -->
-	<div
-		v-if="gameIsOver && !gameOverDismissed"
-		class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center"
-	>
+	<div v-if="gameIsOver && !gameOverDismissed" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center">
 		<div class="bg-slate-800 border border-slate-600 rounded-2xl shadow-2xl p-8 max-w-2xl w-full mx-4">
 			<h2 class="text-2xl font-bold text-amber-300 text-center mb-2">Game Over</h2>
 			<p class="text-amber-200/90 text-sm text-center mb-6 font-medium">Final score</p>
@@ -195,11 +189,8 @@ const boardIndices = Array.from({ length: BOARD_SIZE }, (_, i) => i);
 								:class="idx === 0 ? 'text-amber-300' : 'text-slate-300'"
 							>
 								<div class="flex items-center justify-center gap-1.5">
-									<span
-										class="w-3 h-3 rounded-full shrink-0"
-										:class="PLAYER_COLOR_CLASSES[G?.players[r.playerId]?.color ?? '']"
-									/>
-									<span class="capitalize">{{ G?.players[r.playerId]?.color ?? '' }}</span>
+									<span class="w-3 h-3 rounded-full shrink-0" :class="PLAYER_COLOR_CLASSES[G?.players[r.playerId]?.color ?? '']" />
+									<span class="capitalize">{{ G?.players[r.playerId]?.color ?? "" }}</span>
 									<span v-if="idx === 0" class="text-amber-400">★</span>
 								</div>
 							</th>
@@ -261,7 +252,12 @@ const boardIndices = Array.from({ length: BOARD_SIZE }, (_, i) => i);
 	animation: score-cell-pulse 0.6s ease-in-out infinite;
 }
 @keyframes score-cell-pulse {
-	0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.25); }
-	50% { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.15); }
+	0%,
+	100% {
+		box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.25);
+	}
+	50% {
+		box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.15);
+	}
 }
 </style>

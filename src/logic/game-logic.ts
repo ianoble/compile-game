@@ -1,6 +1,6 @@
 import type { Game, Ctx } from 'boardgame.io';
-import { defineGame } from '@engine/client';
-import type { BaseGameState } from '@engine/client';
+import { defineGame } from '@engine/client/index';
+import type { BaseGameState } from '@engine/client/index';
 import { INVALID_MOVE } from 'boardgame.io/core';
 
 // ---------------------------------------------------------------------------
