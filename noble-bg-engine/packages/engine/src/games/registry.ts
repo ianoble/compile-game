@@ -5,7 +5,7 @@ export const gameRegistry: GameDefinition[] = [];
 
 /** Lookup a game definition by its id. */
 export const gameMap: Record<string, GameDefinition> = Object.fromEntries(
-	gameRegistry.map((def) => [def.id, def]),
+	gameRegistry.map(def => [def.id, def])
 );
 
 /** Register a game at runtime so external projects can add their own games. */

@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
-import { useGame } from "@engine/client/index";
-import type { CompileGameState } from "../logic/game-logic";
-import { NUM_COLUMNS } from "../logic/game-logic";
+import { ref, computed } from 'vue';
+import { useGame } from '@engine/client/index';
+import type { CompileGameState } from '../logic/game-logic';
+import { NUM_COLUMNS } from '../logic/game-logic';
 
 defineProps<{ headerHeight: number }>();
-const emit = defineEmits<{ "back-to-lobby": [] }>();
+const emit = defineEmits<{ 'back-to-lobby': [] }>();
 
 const { state, move, isMyTurn, playerID } = useGame();
 const G = computed(() => state.value as unknown as CompileGameState | undefined);
@@ -52,27 +52,33 @@ function columnTotal(col: { commandStack: { value?: number }[] }): number {
 const myCompiledCount = computed(() => {
 	if (!G.value?.columns || myId.value == null) return 0;
 	const p = myId.value === '0' ? 0 : 1;
-	return G.value.columns.filter((col) => col.protocolCompiled?.[p]).length;
+	return G.value.columns.filter(col => col.protocolCompiled?.[p]).length;
 });
 
 const opponentCompiledCount = computed(() => {
 	if (!G.value?.columns || myId.value == null) return 0;
 	const p = myId.value === '0' ? 1 : 0;
-	return G.value.columns.filter((col) => col.protocolCompiled?.[p]).length;
+	return G.value.columns.filter(col => col.protocolCompiled?.[p]).length;
 });
 </script>
 
 <template>
 	<div class="w-full max-w-4xl mx-auto space-y-6">
 		<p class="text-center text-slate-400 text-sm">
-			Play command cards to columns. When a column total reaches 10+, your protocol there compiles. First to compile all 3 wins.
+			Play command cards to columns. When a column total reaches 10+, your protocol there compiles.
+			First to compile all 3 wins.
 		</p>
 
 		<!-- Compiled count: you vs opponent -->
 		<div v-if="G?.columns" class="flex justify-center gap-6 text-sm">
-			<span class="text-slate-300">Your protocols compiled: <strong class="text-emerald-400">{{ myCompiledCount }}/3</strong></span>
+			<span class="text-slate-300"
+				>Your protocols compiled:
+				<strong class="text-emerald-400">{{ myCompiledCount }}/3</strong></span
+			>
 			<span class="text-slate-500">|</span>
-			<span class="text-slate-400">Opponent: <strong>{{ opponentCompiledCount }}/3</strong></span>
+			<span class="text-slate-400"
+				>Opponent: <strong>{{ opponentCompiledCount }}/3</strong></span
+			>
 		</div>
 
 		<!-- 3 columns: protocol row + command stack -->
@@ -83,10 +89,16 @@ const opponentCompiledCount = computed(() => {
 				class="rounded-xl border border-slate-600 bg-slate-800/60 p-4 min-h-[140px] flex flex-col"
 			>
 				<div class="flex items-center justify-between mb-2">
-					<span class="text-xs font-medium text-slate-500 uppercase tracking-wide">{{ COLUMN_LABELS[colIdx] }}</span>
+					<span class="text-xs font-medium text-slate-500 uppercase tracking-wide">{{
+						COLUMN_LABELS[colIdx]
+					}}</span>
 					<span
 						class="text-xs tabular-nums"
-						:class="columnTotal(col) >= COMPILE_THRESHOLD ? 'text-amber-400 font-semibold' : 'text-slate-500'"
+						:class="
+							columnTotal(col) >= COMPILE_THRESHOLD
+								? 'text-amber-400 font-semibold'
+								: 'text-slate-500'
+						"
 					>
 						{{ columnTotal(col) }}/{{ COMPILE_THRESHOLD }}
 					</span>
@@ -102,7 +114,11 @@ const opponentCompiledCount = computed(() => {
 						"
 					>
 						{{ myId === '0' ? protocolLabel(col.protocol[0]) : protocolLabel(col.protocol[1]) }}
-						<span v-if="col.protocolCompiled?.[myId === '0' ? 0 : 1]" class="text-[10px] text-amber-400 mt-0.5">Compiled</span>
+						<span
+							v-if="col.protocolCompiled?.[myId === '0' ? 0 : 1]"
+							class="text-[10px] text-amber-400 mt-0.5"
+							>Compiled</span
+						>
 					</div>
 					<div class="text-slate-500 self-center text-xs">vs</div>
 					<div
@@ -114,7 +130,11 @@ const opponentCompiledCount = computed(() => {
 						"
 					>
 						{{ myId === '0' ? protocolLabel(col.protocol[1]) : protocolLabel(col.protocol[0]) }}
-						<span v-if="col.protocolCompiled?.[myId === '0' ? 1 : 0]" class="text-[10px] text-amber-400 mt-0.5">Compiled</span>
+						<span
+							v-if="col.protocolCompiled?.[myId === '0' ? 1 : 0]"
+							class="text-[10px] text-amber-400 mt-0.5"
+							>Compiled</span
+						>
 					</div>
 				</div>
 				<!-- Command stack -->
@@ -129,8 +149,18 @@ const opponentCompiledCount = computed(() => {
 								: 'bg-slate-700 border-slate-600 text-slate-500'
 						"
 					>
-						<span>{{ entry.owner === myId ? cardLabel(entry.cardId) : (entry.faceUp ? cardLabel(entry.cardId) : '?') }}</span>
-						<span v-if="entry.faceUp || entry.owner === myId" class="text-[9px] text-slate-400 mt-0.5">{{ entry.value }}</span>
+						<span>{{
+							entry.owner === myId
+								? cardLabel(entry.cardId)
+								: entry.faceUp
+									? cardLabel(entry.cardId)
+									: '?'
+						}}</span>
+						<span
+							v-if="entry.faceUp || entry.owner === myId"
+							class="text-[9px] text-slate-400 mt-0.5"
+							>{{ entry.value }}</span
+						>
 					</div>
 				</div>
 			</div>
@@ -185,14 +215,19 @@ const opponentCompiledCount = computed(() => {
 								: 'bg-slate-800 border-slate-600 text-slate-400'
 					"
 					:disabled="!isMyTurn"
-					@click="isMyTurn && (selectedHandIndex === idx ? (selectedHandIndex = null) : (selectedHandIndex = idx))"
+					@click="
+						isMyTurn &&
+						(selectedHandIndex === idx ? (selectedHandIndex = null) : (selectedHandIndex = idx))
+					"
 				>
 					<template v-if="'hidden' in card">
 						<span class="text-slate-500">?</span>
 					</template>
 					<template v-else>
 						<span>{{ (card as { name?: string }).name ?? (card as { id: string }).id }}</span>
-						<span class="text-[10px] text-slate-400 mt-0.5">{{ (card as { value?: number }).value ?? '?' }}</span>
+						<span class="text-[10px] text-slate-400 mt-0.5">{{
+							(card as { value?: number }).value ?? '?'
+						}}</span>
 					</template>
 				</button>
 			</div>

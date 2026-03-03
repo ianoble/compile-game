@@ -1,21 +1,28 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from "vue";
-import { useRouter } from "vue-router";
-import { useGame, useTurnNotifications, loadSession, clearSession } from "@engine/client/index";
-import { gameDef, type CompileGameState } from "../logic/game-logic";
-import { useBotPlayers } from "../composables/useBotPlayers";
-import GameBoard from "../components/GameBoard.vue";
-import DraftProtocol from "../components/DraftProtocol.vue";
-import { SERVER_URL } from "../config";
-import { deleteServerSession, voteToAbandon, cancelAbandonVote, getAbandonVoteStatus, type AbandonVoteStatus } from "../composables/useAuth";
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
+import { useRouter } from 'vue-router';
+import { useGame, useTurnNotifications, loadSession, clearSession } from '@engine/client/index';
+import { gameDef, type CompileGameState } from '../logic/game-logic';
+import { useBotPlayers } from '../composables/useBotPlayers';
+import GameBoard from '../components/GameBoard.vue';
+import DraftProtocol from '../components/DraftProtocol.vue';
+import { SERVER_URL } from '../config';
+import {
+	deleteServerSession,
+	voteToAbandon,
+	cancelAbandonVote,
+	getAbandonVoteStatus,
+	type AbandonVoteStatus,
+} from '../composables/useAuth';
 
 const props = defineProps<{ matchID: string; playerID: string }>();
 const router = useRouter();
 
-const { isConnected, isMyTurn, state, gameover, reconnecting, connect, disconnect, playerID, ctx } = useGame();
+const { isConnected, isMyTurn, state, gameover, reconnecting, connect, disconnect, playerID, ctx } =
+	useGame();
 
 const G = computed(() => state.value as unknown as CompileGameState | undefined);
-const phase = computed(() => ctx.value?.phase ?? "");
+const phase = computed(() => ctx.value?.phase ?? '');
 
 const {
 	requestPermission: requestTurnNotifications,
@@ -23,7 +30,7 @@ const {
 	supported: notificationsSupported,
 } = useTurnNotifications({
 	displayName: gameDef.displayName,
-	icon: "/favicon.ico",
+	icon: '/favicon.ico',
 });
 
 const headerEl = ref<HTMLElement | null>(null);
@@ -35,7 +42,7 @@ function measureHeader() {
 	}
 }
 
-const turnCueMessage = ref("");
+const turnCueMessage = ref('');
 const turnCueVisible = ref(false);
 const prevIsMyTurn = ref(false);
 let cueTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -43,12 +50,12 @@ const CUE_DURATION_MS = 2500;
 
 async function onEnableTurnNotifications() {
 	const p = await requestTurnNotifications();
-	if (p === "granted") {
+	if (p === 'granted') {
 		try {
 			const n = new Notification(gameDef.displayName, {
 				body: "You'll get notified when it's your turn.",
-				icon: "/favicon.ico",
-				tag: "notify-on",
+				icon: '/favicon.ico',
+				tag: 'notify-on',
 			});
 			setTimeout(() => n.close(), 4000);
 		} catch {
@@ -60,7 +67,7 @@ async function onEnableTurnNotifications() {
 
 watch(
 	isMyTurn,
-	(newTurn) => {
+	newTurn => {
 		if (gameover.value || reconnecting.value) return;
 		const wasMyTurn = prevIsMyTurn.value;
 		prevIsMyTurn.value = newTurn;
@@ -71,7 +78,7 @@ watch(
 			return;
 		}
 		if (newTurn && !wasMyTurn) {
-			turnCueMessage.value = "Your turn!";
+			turnCueMessage.value = 'Your turn!';
 			turnCueVisible.value = true;
 			cueTimeout = setTimeout(() => {
 				turnCueVisible.value = false;
@@ -79,7 +86,7 @@ watch(
 			}, CUE_DURATION_MS);
 		}
 	},
-	{ immediate: true },
+	{ immediate: true }
 );
 
 const confirmingAbandon = ref(false);
@@ -91,7 +98,7 @@ function closeGameMenu() {
 
 function onClickOutsideMenu(e: MouseEvent) {
 	const target = e.target as HTMLElement;
-	if (!target.closest(".game-menu-container")) {
+	if (!target.closest('.game-menu-container')) {
 		closeGameMenu();
 	}
 }
@@ -99,13 +106,13 @@ function onClickOutsideMenu(e: MouseEvent) {
 const abandonVoteStatus = ref<AbandonVoteStatus | null>(null);
 const iHaveVoted = computed(() => {
 	if (!abandonVoteStatus.value) return false;
-	const myName = localStorage.getItem("bgf:playerName") ?? "";
+	const myName = localStorage.getItem('bgf:playerName') ?? '';
 	return abandonVoteStatus.value.voters.includes(myName);
 });
 
 const isMultiHuman = computed(() => {
 	const botCredsKey = `bgf:bots:${gameDef.id}:${props.matchID}`;
-	const botCreds = JSON.parse(localStorage.getItem(botCredsKey) || "{}");
+	const botCreds = JSON.parse(localStorage.getItem(botCredsKey) || '{}');
 	const numBots = Object.keys(botCreds).length;
 	const totalPlayers = G.value ? Object.keys(G.value.players).length : 0;
 	return totalPlayers - numBots >= 2;
@@ -144,7 +151,7 @@ onMounted(() => {
 	const creds = session?.playerID === props.playerID ? session.credentials : undefined;
 	connect(gameDef.id, props.matchID, props.playerID, creds);
 	startVotePolling();
-	document.addEventListener("click", onClickOutsideMenu);
+	document.addEventListener('click', onClickOutsideMenu);
 	nextTick(measureHeader);
 	setTimeout(() => requestTurnNotifications(), 2000);
 });
@@ -155,7 +162,7 @@ onUnmounted(() => {
 	if (cueTimeout) clearTimeout(cueTimeout);
 	disconnect();
 	stopVotePolling();
-	document.removeEventListener("click", onClickOutsideMenu);
+	document.removeEventListener('click', onClickOutsideMenu);
 });
 
 async function handleAbandonClick() {
@@ -194,8 +201,8 @@ async function abandonGame() {
 
 	try {
 		await fetch(`${SERVER_URL}/games/${gameDef.id}/${props.matchID}/leave`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
 				playerID: session.playerID,
 				credentials: session.credentials,
@@ -203,14 +210,14 @@ async function abandonGame() {
 		});
 
 		const botCredsKey = `bgf:bots:${gameDef.id}:${props.matchID}`;
-		const botCreds = JSON.parse(localStorage.getItem(botCredsKey) || "{}");
+		const botCreds = JSON.parse(localStorage.getItem(botCredsKey) || '{}');
 		const botPlayerIDs = Object.keys(botCreds);
 		if (botPlayerIDs.length > 0) {
 			for (const botPid of botPlayerIDs) {
 				try {
 					await fetch(`${SERVER_URL}/games/${gameDef.id}/${props.matchID}/leave`, {
-						method: "POST",
-						headers: { "Content-Type": "application/json" },
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
 						body: JSON.stringify({ playerID: botPid, credentials: botCreds[botPid] }),
 					});
 				} catch {
@@ -226,15 +233,23 @@ async function abandonGame() {
 	disconnect();
 	clearSession(gameDef.id, props.matchID);
 	await deleteServerSession(gameDef.id, props.matchID);
-	router.push("/");
+	router.push('/');
 }
 </script>
 
 <template>
 	<div class="min-h-screen bg-slate-900 text-white flex flex-col items-center">
-		<div ref="headerEl" class="fixed top-0 left-0 right-0 z-40 bg-slate-900 border-b border-slate-700/60">
-			<div class="max-w-5xl mx-auto flex flex-wrap md:flex-nowrap items-center justify-between px-3 md:px-6 py-1.5 md:py-2 gap-x-3 gap-y-0.5">
-				<router-link to="/" class="text-xs md:text-sm text-slate-500 hover:text-slate-300 transition-colors shrink-0">
+		<div
+			ref="headerEl"
+			class="fixed top-0 left-0 right-0 z-40 bg-slate-900 border-b border-slate-700/60"
+		>
+			<div
+				class="max-w-5xl mx-auto flex flex-wrap md:flex-nowrap items-center justify-between px-3 md:px-6 py-1.5 md:py-2 gap-x-3 gap-y-0.5"
+			>
+				<router-link
+					to="/"
+					class="text-xs md:text-sm text-slate-500 hover:text-slate-300 transition-colors shrink-0"
+				>
 					&larr; Back
 				</router-link>
 
@@ -268,7 +283,13 @@ async function abandonGame() {
 								class="flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors w-full text-left"
 								@click="onEnableTurnNotifications"
 							>
-								<svg class="w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<svg
+									class="w-4 h-4 text-slate-400"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+								>
 									<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
 									<path d="M13.73 21a2 2 0 0 1-3.46 0" />
 								</svg>
@@ -278,7 +299,13 @@ async function abandonGame() {
 								v-else-if="notificationsSupported && notificationPermission === 'granted'"
 								class="flex items-center gap-2 px-4 py-2 text-sm text-emerald-400/90"
 							>
-								<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<svg
+									class="w-4 h-4"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+								>
 									<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
 									<polyline points="22 4 12 14.01 9 11.01" />
 								</svg>
@@ -286,7 +313,10 @@ async function abandonGame() {
 							</p>
 						</div>
 					</div>
-					<div v-if="G" class="flex items-center gap-2 md:gap-3 text-[10px] md:text-xs text-slate-400 mb-0.5 md:mb-1 min-h-5 md:min-h-6">
+					<div
+						v-if="G"
+						class="flex items-center gap-2 md:gap-3 text-[10px] md:text-xs text-slate-400 mb-0.5 md:mb-1 min-h-5 md:min-h-6"
+					>
 						<template v-if="isMyTurn">
 							<span class="text-emerald-400 font-medium animate-pulse">Your turn</span>
 						</template>
@@ -300,9 +330,12 @@ async function abandonGame() {
 					<span
 						class="px-2 md:px-2.5 py-0.5 md:py-1 rounded-full text-[10px] md:text-xs"
 						:class="isConnected ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'"
-						>{{ isConnected ? "Connected" : "Connecting..." }}</span
+						>{{ isConnected ? 'Connected' : 'Connecting...' }}</span
 					>
-					<button class="text-[10px] md:text-xs text-red-500/60 hover:text-red-400 transition-colors" @click="handleAbandonClick">
+					<button
+						class="text-[10px] md:text-xs text-red-500/60 hover:text-red-400 transition-colors"
+						@click="handleAbandonClick"
+					>
 						Abandon
 					</button>
 				</div>
@@ -327,8 +360,12 @@ async function abandonGame() {
 
 		<div class="w-full flex flex-col items-center p-2 md:p-6">
 			<div v-if="gameover" class="mb-6 text-center">
-				<p v-if="gameover.winner === playerID" class="text-2xl font-bold text-green-400">You win!</p>
-				<p v-else-if="gameover.winner !== undefined" class="text-2xl font-bold text-red-400">You lose.</p>
+				<p v-if="gameover.winner === playerID" class="text-2xl font-bold text-green-400">
+					You win!
+				</p>
+				<p v-else-if="gameover.winner !== undefined" class="text-2xl font-bold text-red-400">
+					You lose.
+				</p>
 				<p v-else class="text-2xl font-bold text-slate-400">It's a draw.</p>
 			</div>
 
@@ -337,19 +374,33 @@ async function abandonGame() {
 			</div>
 
 			<DraftProtocol v-if="!reconnecting && phase === 'draft'" />
-			<GameBoard v-else-if="!reconnecting && phase === 'play'" :header-height="headerHeight" @back-to-lobby="router.push('/')" />
+			<GameBoard
+				v-else-if="!reconnecting && phase === 'play'"
+				:header-height="headerHeight"
+				@back-to-lobby="router.push('/')"
+			/>
 			<div v-else-if="!reconnecting" class="text-center text-slate-400">Loading game...</div>
 		</div>
 
 		<Teleport to="body">
-			<div v-if="abandonVoteStatus" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-				<div class="bg-slate-800 border border-slate-700 rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl">
+			<div
+				v-if="abandonVoteStatus"
+				class="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+			>
+				<div
+					class="bg-slate-800 border border-slate-700 rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl"
+				>
 					<h3 class="text-lg font-semibold text-white mb-1">Abandon Vote</h3>
 					<p class="text-sm text-slate-400 mb-5">
-						{{ abandonVoteStatus.voters.length }} of {{ abandonVoteStatus.totalHumans }} players want to abandon.
+						{{ abandonVoteStatus.voters.length }} of {{ abandonVoteStatus.totalHumans }} players
+						want to abandon.
 					</p>
 					<ul class="space-y-2 mb-6">
-						<li v-for="voter in abandonVoteStatus.voters" :key="voter" class="flex items-center gap-2 text-sm">
+						<li
+							v-for="voter in abandonVoteStatus.voters"
+							:key="voter"
+							class="flex items-center gap-2 text-sm"
+						>
 							<span
 								class="w-4 h-4 rounded bg-red-600/30 border border-red-500/50 flex items-center justify-center text-[10px] text-red-400"
 								>&#10003;</span
@@ -385,9 +436,13 @@ async function abandonGame() {
 				class="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
 				@click.self="confirmingAbandon = false"
 			>
-				<div class="bg-slate-800 border border-slate-700 rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl">
+				<div
+					class="bg-slate-800 border border-slate-700 rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl"
+				>
 					<h3 class="text-lg font-semibold text-white mb-2">Abandon game?</h3>
-					<p class="text-sm text-slate-400 mb-6">This will remove you from the game. This action cannot be undone.</p>
+					<p class="text-sm text-slate-400 mb-6">
+						This will remove you from the game. This action cannot be undone.
+					</p>
 					<div class="flex justify-end gap-3">
 						<button
 							class="px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 transition-colors"

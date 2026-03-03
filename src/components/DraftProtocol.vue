@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import { useGame } from "@engine/client/index";
-import type { CompileGameState } from "../logic/game-logic";
-import { isCardHidden } from "@engine/client/index";
+import { computed } from 'vue';
+import { useGame } from '@engine/client/index';
+import type { CompileGameState } from '../logic/game-logic';
+import { isCardHidden } from '@engine/client/index';
 
 const { state, move, isMyTurn, playerID, ctx } = useGame();
 const G = computed(() => state.value as unknown as CompileGameState | undefined);
-const phase = computed(() => ctx.value?.phase ?? "");
+const phase = computed(() => ctx.value?.phase ?? '');
 const myId = computed(() => playerID.value ?? null);
 
 const protocolPool = computed(() => G.value?.protocolPool ?? []);
@@ -19,9 +19,9 @@ const myProtocols = computed(() => {
 const draftOrderLabel = computed(() => {
 	if (!isMyTurn.value) return "Opponent's pick";
 	const n = myProtocols.value.length;
-	if (n < 1) return "Pick 1 protocol card";
-	if (n < 3) return "Pick 2 protocol cards";
-	return "Pick 1 protocol card";
+	if (n < 1) return 'Pick 1 protocol card';
+	if (n < 3) return 'Pick 2 protocol cards';
+	return 'Pick 1 protocol card';
 });
 </script>
 
@@ -52,7 +52,9 @@ const draftOrderLabel = computed(() => {
 						@click="move('draftProtocol', idx)"
 					>
 						<template v-if="!isCardHidden(card)">
-							<span class="text-slate-200">{{ (card as { name?: string }).name ?? (card as { id: string }).id }}</span>
+							<span class="text-slate-200">{{
+								(card as { name?: string }).name ?? (card as { id: string }).id
+							}}</span>
 						</template>
 						<template v-else>
 							<span class="text-slate-500">?</span>
@@ -61,7 +63,9 @@ const draftOrderLabel = computed(() => {
 				</div>
 			</div>
 			<div class="md:col-span-2">
-				<h3 class="text-xs font-medium text-slate-500 mb-2 uppercase tracking-wide">Your protocols ({{ myProtocols.length }}/3)</h3>
+				<h3 class="text-xs font-medium text-slate-500 mb-2 uppercase tracking-wide">
+					Your protocols ({{ myProtocols.length }}/3)
+				</h3>
 				<div class="flex flex-wrap gap-2 min-h-[80px]">
 					<div
 						v-for="(card, idx) in myProtocols"

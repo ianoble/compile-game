@@ -35,9 +35,11 @@ When you copy this folder into the engine repo (e.g. `noble-bg-engine/packages/m
 
 2. **Vite alias**  
    In `vite.config.ts`, set the `@engine` alias to the engine source:
+
    ```ts
    '@engine': path.resolve(__dirname, '../engine/src'),
    ```
+
    (or the path to wherever the engine package lives relative to the template copy).
 
 3. **TypeScript paths**  
@@ -68,11 +70,11 @@ When you copy this folder into the engine repo (e.g. `noble-bg-engine/packages/m
 
 ## Contract: what the shell expects from the game
 
-| Export           | Used by              | Purpose                                                                 |
-|------------------|----------------------|-------------------------------------------------------------------------|
-| `gameDef`        | main, Lobby, Join, GameView | id, displayName, description, min/max players, setupOptions, game (boardgame.io) |
-| `PLAYER_COLORS`  | LobbyView, JoinView  | Color picker for join/host (e.g. `['red','blue','green','yellow']`)     |
-| `PlayerColor`    | LobbyView, JoinView  | Type for selected color                                                 |
+| Export          | Used by                     | Purpose                                                                          |
+| --------------- | --------------------------- | -------------------------------------------------------------------------------- |
+| `gameDef`       | main, Lobby, Join, GameView | id, displayName, description, min/max players, setupOptions, game (boardgame.io) |
+| `PLAYER_COLORS` | LobbyView, JoinView         | Color picker for join/host (e.g. `['red','blue','green','yellow']`)              |
+| `PlayerColor`   | LobbyView, JoinView         | Type for selected color                                                          |
 
 Session, abandon vote, and API calls use `gameDef.id` and `gameDef.displayName`. Setup options are driven by `gameDef.setupOptions`. The game’s boardgame.io `setup` receives `setupData` built from those options.
 

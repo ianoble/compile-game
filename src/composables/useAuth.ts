@@ -140,7 +140,7 @@ export async function syncSessionToServer(
 	matchID: string,
 	playerSeatID: string,
 	credentials: string,
-	pName: string,
+	pName: string
 ) {
 	if (!playerToken.value || isDevSession.value) return;
 	try {
@@ -149,7 +149,9 @@ export async function syncSessionToServer(
 			headers: { 'Content-Type': 'application/json', ...authHeaders() },
 			body: JSON.stringify({ gameName, matchID, playerSeatID, credentials, playerName: pName }),
 		});
-	} catch { /* best effort */ }
+	} catch {
+		/* best effort */
+	}
 }
 
 export async function deleteServerSession(gameName: string, matchID: string) {
@@ -159,7 +161,9 @@ export async function deleteServerSession(gameName: string, matchID: string) {
 			method: 'DELETE',
 			headers: authHeaders(),
 		});
-	} catch { /* best effort */ }
+	} catch {
+		/* best effort */
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -172,7 +176,10 @@ export interface AbandonVoteStatus {
 	allAgreed: boolean;
 }
 
-export async function voteToAbandon(gameName: string, matchID: string): Promise<AbandonVoteStatus | null> {
+export async function voteToAbandon(
+	gameName: string,
+	matchID: string
+): Promise<AbandonVoteStatus | null> {
 	if (!playerToken.value || isDevSession.value) return null;
 	try {
 		const res = await fetch(`${SERVER_URL}/auth/vote-abandon`, {
@@ -194,10 +201,15 @@ export async function cancelAbandonVote(gameName: string, matchID: string): Prom
 			method: 'DELETE',
 			headers: authHeaders(),
 		});
-	} catch { /* best effort */ }
+	} catch {
+		/* best effort */
+	}
 }
 
-export async function getAbandonVoteStatus(gameName: string, matchID: string): Promise<AbandonVoteStatus | null> {
+export async function getAbandonVoteStatus(
+	gameName: string,
+	matchID: string
+): Promise<AbandonVoteStatus | null> {
 	if (!playerToken.value || isDevSession.value) return null;
 	try {
 		const res = await fetch(`${SERVER_URL}/auth/vote-abandon/${gameName}/${matchID}`, {

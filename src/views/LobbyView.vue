@@ -1,10 +1,16 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from "vue";
-import { useRouter } from "vue-router";
-import { saveSession, loadSession, clearSession } from "@engine/client/index";
-import { gameDef, PLAYER_COLORS, type PlayerColor } from "../logic/game-logic";
-import { SERVER_URL } from "../config";
-import { useAuth, authHeaders, syncSessionToServer, deleteServerSession, fetchServerSessions } from "../composables/useAuth";
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { useRouter } from 'vue-router';
+import { saveSession, loadSession, clearSession } from '@engine/client/index';
+import { gameDef, PLAYER_COLORS, type PlayerColor } from '../logic/game-logic';
+import { SERVER_URL } from '../config';
+import {
+	useAuth,
+	authHeaders,
+	syncSessionToServer,
+	deleteServerSession,
+	fetchServerSessions,
+} from '../composables/useAuth';
 
 const POLL_INTERVAL = 3000;
 
@@ -14,16 +20,27 @@ const router = useRouter();
 // Auth
 // ---------------------------------------------------------------------------
 
-const { playerName, isLoggedIn, loginError, loading: authLoading, register, login, logout } = useAuth();
-const authMode = ref<"login" | "register">("login");
-const authName = ref("");
-const authPin = ref("");
+const {
+	playerName,
+	isLoggedIn,
+	loginError,
+	loading: authLoading,
+	register,
+	login,
+	logout,
+} = useAuth();
+const authMode = ref<'login' | 'register'>('login');
+const authName = ref('');
+const authPin = ref('');
 
 async function handleAuth() {
-	const ok = authMode.value === "register" ? await register(authName.value, authPin.value) : await login(authName.value, authPin.value);
+	const ok =
+		authMode.value === 'register'
+			? await register(authName.value, authPin.value)
+			: await login(authName.value, authPin.value);
 	if (ok) {
-		authName.value = "";
-		authPin.value = "";
+		authName.value = '';
+		authPin.value = '';
 		await restoreServerSessions();
 		await refreshData();
 	}
@@ -77,18 +94,18 @@ interface MyGameInfo extends MatchInfo {
 // State
 // ---------------------------------------------------------------------------
 
-type ViewMode = "browse" | "hosting";
-const viewMode = ref<ViewMode>("browse");
+type ViewMode = 'browse' | 'hosting';
+const viewMode = ref<ViewMode>('browse');
 
 const myGames = ref<MyGameInfo[]>([]);
 const openGames = ref<MatchInfo[]>([]);
 const loading = ref(true);
-const errorMsg = ref("");
+const errorMsg = ref('');
 
 const showCreateForm = ref(false);
 const numPlayers = ref(gameDef.minPlayers);
 const creating = ref(false);
-const selectedColor = ref<PlayerColor>("red");
+const selectedColor = ref<PlayerColor>('red');
 
 function buildDefaultSetupData(): Record<string, unknown> {
 	const data: Record<string, unknown> = {};
@@ -100,9 +117,11 @@ function buildDefaultSetupData(): Record<string, unknown> {
 const setupData = ref<Record<string, unknown>>(buildDefaultSetupData());
 
 const BASE_MAX_PLAYERS = 4;
-const effectiveMaxPlayers = computed(() => (setupData.value.expansion ? gameDef.maxPlayers : Math.min(gameDef.maxPlayers, BASE_MAX_PLAYERS)));
+const effectiveMaxPlayers = computed(() =>
+	setupData.value.expansion ? gameDef.maxPlayers : Math.min(gameDef.maxPlayers, BASE_MAX_PLAYERS)
+);
 const playerCountFixed = computed(() => gameDef.minPlayers === gameDef.maxPlayers);
-watch(effectiveMaxPlayers, (max) => {
+watch(effectiveMaxPlayers, max => {
 	if (numPlayers.value > max) numPlayers.value = max;
 });
 
@@ -111,21 +130,21 @@ const hostedPlayers = ref<MatchPlayer[]>([]);
 const linkCopied = ref(false);
 
 const joinModalMatchID = ref<string | null>(null);
-const joinModalColor = ref<PlayerColor>("red");
+const joinModalColor = ref<PlayerColor>('red');
 function openJoinModal(game: MatchInfo) {
 	joinModalMatchID.value = game.matchID;
-	const taken = new Set(game.players.map((p) => p.data?.color).filter(Boolean) as string[]);
-	const available = PLAYER_COLORS.filter((c) => !taken.has(c));
-	joinModalColor.value = (available[0] as PlayerColor) ?? "red";
+	const taken = new Set(game.players.map(p => p.data?.color).filter(Boolean) as string[]);
+	const available = PLAYER_COLORS.filter(c => !taken.has(c));
+	joinModalColor.value = (available[0] as PlayerColor) ?? 'red';
 }
 function closeJoinModal() {
 	joinModalMatchID.value = null;
 }
 const joinModalAvailableColors = computed(() => {
 	if (!joinModalMatchID.value) return [];
-	const game = openGames.value.find((g) => g.matchID === joinModalMatchID.value);
-	const taken = new Set((game?.players ?? []).map((p) => p.data?.color).filter(Boolean) as string[]);
-	return PLAYER_COLORS.filter((c) => !taken.has(c));
+	const game = openGames.value.find(g => g.matchID === joinModalMatchID.value);
+	const taken = new Set((game?.players ?? []).map(p => p.data?.color).filter(Boolean) as string[]);
+	return PLAYER_COLORS.filter(c => !taken.has(c));
 });
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -178,11 +197,11 @@ async function refreshData() {
 		const allMatches = await fetchMatchList();
 		const sessions = getStoredSessions();
 
-		const myMatchIDs = new Set(sessions.map((s) => s.matchID));
+		const myMatchIDs = new Set(sessions.map(s => s.matchID));
 
 		const myGamesList: MyGameInfo[] = [];
 		for (const session of sessions) {
-			const match = allMatches.find((m) => m.matchID === session.matchID);
+			const match = allMatches.find(m => m.matchID === session.matchID);
 			if (match) {
 				myGamesList.push({
 					...match,
@@ -194,14 +213,14 @@ async function refreshData() {
 		myGames.value = myGamesList.sort((a, b) => b.updatedAt - a.updatedAt);
 
 		openGames.value = allMatches
-			.filter((m) => {
+			.filter(m => {
 				if (myMatchIDs.has(m.matchID)) return false;
 				if (m.gameover) return false;
-				return m.players.some((p) => !p.name);
+				return m.players.some(p => !p.name);
 			})
 			.sort((a, b) => b.createdAt - a.createdAt);
 	} catch {
-		errorMsg.value = "Could not connect to game server";
+		errorMsg.value = 'Could not connect to game server';
 	} finally {
 		loading.value = false;
 	}
@@ -213,23 +232,23 @@ async function refreshData() {
 
 async function createMatch() {
 	creating.value = true;
-	errorMsg.value = "";
+	errorMsg.value = '';
 
 	try {
-		const name = playerName.value.trim() || "Player";
+		const name = playerName.value.trim() || 'Player';
 
 		const createRes = await fetch(`${SERVER_URL}/games/${gameDef.id}/create`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json", ...authHeaders() },
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json', ...authHeaders() },
 			body: JSON.stringify({
 				numPlayers: numPlayers.value,
 				setupData: setupData.value,
 			}),
 		});
-		if (createRes.status === 403) throw new Error("Authentication required to create games");
+		if (createRes.status === 403) throw new Error('Authentication required to create games');
 		if (!createRes.ok) {
 			const body = await createRes.text();
-			let msg = "Server rejected match creation";
+			let msg = 'Server rejected match creation';
 			try {
 				const err = body ? JSON.parse(body) : null;
 				if (err?.error) msg = err.error;
@@ -242,32 +261,32 @@ async function createMatch() {
 		const { matchID } = (await createRes.json()) as { matchID: string };
 
 		const joinRes = await fetch(`${SERVER_URL}/games/${gameDef.id}/${matchID}/join`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
-				playerID: "0",
+				playerID: '0',
 				playerName: name,
 				data: { color: selectedColor.value },
 			}),
 		});
-		if (!joinRes.ok) throw new Error("Failed to claim host seat");
+		if (!joinRes.ok) throw new Error('Failed to claim host seat');
 		const { playerCredentials } = (await joinRes.json()) as { playerCredentials: string };
 
 		saveSession(gameDef.id, matchID, {
-			playerID: "0",
+			playerID: '0',
 			credentials: playerCredentials,
 			playerName: name,
 			playerColor: selectedColor.value,
 		});
-		await syncSessionToServer(gameDef.id, matchID, "0", playerCredentials, name);
+		await syncSessionToServer(gameDef.id, matchID, '0', playerCredentials, name);
 
 		hostedMatchID.value = matchID;
 		showCreateForm.value = false;
 		setupData.value = buildDefaultSetupData();
-		viewMode.value = "hosting";
+		viewMode.value = 'hosting';
 		startHostPolling(matchID);
 	} catch (e: unknown) {
-		errorMsg.value = e instanceof Error ? e.message : "Failed to create match";
+		errorMsg.value = e instanceof Error ? e.message : 'Failed to create match';
 	} finally {
 		creating.value = false;
 	}
@@ -278,30 +297,30 @@ async function createMatch() {
 // ---------------------------------------------------------------------------
 
 async function joinGame(matchID: string, color?: PlayerColor) {
-	errorMsg.value = "";
+	errorMsg.value = '';
 	closeJoinModal();
 
 	try {
-		const name = playerName.value.trim() || "Player";
+		const name = playerName.value.trim() || 'Player';
 		const colorToUse = color ?? joinModalColor.value;
 
 		const match = await fetchMatch(matchID);
-		if (!match) throw new Error("Match not found");
+		if (!match) throw new Error('Match not found');
 
-		const openSeat = match.players.find((p) => !p.name);
-		if (!openSeat) throw new Error("No open seats");
+		const openSeat = match.players.find(p => !p.name);
+		if (!openSeat) throw new Error('No open seats');
 		const seatID = String(openSeat.id);
 
 		const joinRes = await fetch(`${SERVER_URL}/games/${gameDef.id}/${matchID}/join`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
 				playerID: seatID,
 				playerName: name,
 				data: { color: colorToUse },
 			}),
 		});
-		if (!joinRes.ok) throw new Error("Failed to claim seat");
+		if (!joinRes.ok) throw new Error('Failed to claim seat');
 		const { playerCredentials } = (await joinRes.json()) as { playerCredentials: string };
 
 		saveSession(gameDef.id, matchID, {
@@ -314,7 +333,7 @@ async function joinGame(matchID: string, color?: PlayerColor) {
 
 		router.push(`/game/${matchID}/${seatID}`);
 	} catch (e: unknown) {
-		errorMsg.value = e instanceof Error ? e.message : "Failed to join game";
+		errorMsg.value = e instanceof Error ? e.message : 'Failed to join game';
 	}
 }
 
@@ -323,30 +342,30 @@ async function joinGame(matchID: string, color?: PlayerColor) {
 // ---------------------------------------------------------------------------
 
 async function abandonGame(matchID: string) {
-	errorMsg.value = "";
+	errorMsg.value = '';
 	const session = loadSession(gameDef.id, matchID);
 	if (!session) return;
 
 	try {
 		const res = await fetch(`${SERVER_URL}/games/${gameDef.id}/${matchID}/leave`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
 				playerID: session.playerID,
 				credentials: session.credentials,
 			}),
 		});
-		if (!res.ok) throw new Error("Server rejected leave request");
+		if (!res.ok) throw new Error('Server rejected leave request');
 
 		const botCredsKey = `bgf:bots:${gameDef.id}:${matchID}`;
-		const botCreds = JSON.parse(localStorage.getItem(botCredsKey) || "{}");
+		const botCreds = JSON.parse(localStorage.getItem(botCredsKey) || '{}');
 		const botPlayerIDs = Object.keys(botCreds);
 		if (botPlayerIDs.length > 0) {
 			for (const botPid of botPlayerIDs) {
 				try {
 					await fetch(`${SERVER_URL}/games/${gameDef.id}/${matchID}/leave`, {
-						method: "POST",
-						headers: { "Content-Type": "application/json" },
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
 						body: JSON.stringify({ playerID: botPid, credentials: botCreds[botPid] }),
 					});
 				} catch {
@@ -386,15 +405,17 @@ async function pollHostedMatch(matchID: string) {
 	hostedPlayers.value = match.players;
 }
 
-const allSeatsFilled = computed(() => hostedPlayers.value.length > 0 && hostedPlayers.value.every((p) => p.name));
+const allSeatsFilled = computed(
+	() => hostedPlayers.value.length > 0 && hostedPlayers.value.every(p => p.name)
+);
 
-const filledCount = computed(() => hostedPlayers.value.filter((p) => p.name).length);
+const filledCount = computed(() => hostedPlayers.value.filter(p => p.name).length);
 
 const fillingBots = ref(false);
 
 function saveBotCredentials(mID: string, playerID: string, credentials: string) {
 	const key = `bgf:bots:${gameDef.id}:${mID}`;
-	const existing = JSON.parse(localStorage.getItem(key) || "{}");
+	const existing = JSON.parse(localStorage.getItem(key) || '{}');
 	existing[playerID] = credentials;
 	localStorage.setItem(key, JSON.stringify(existing));
 }
@@ -402,16 +423,16 @@ function saveBotCredentials(mID: string, playerID: string, credentials: string) 
 async function fillWithBots() {
 	if (!hostedMatchID.value) return;
 	fillingBots.value = true;
-	errorMsg.value = "";
+	errorMsg.value = '';
 
 	try {
-		const emptySeats = hostedPlayers.value.filter((p) => !p.name);
+		const emptySeats = hostedPlayers.value.filter(p => !p.name);
 		for (let i = 0; i < emptySeats.length; i++) {
 			const seatID = String(emptySeats[i].id);
 			const botName = `Bot ${emptySeats[i].id}`;
 			const res = await fetch(`${SERVER_URL}/games/${gameDef.id}/${hostedMatchID.value}/join`, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ playerID: seatID, playerName: botName }),
 			});
 			if (!res.ok) throw new Error(`Failed to seat ${botName}`);
@@ -420,24 +441,24 @@ async function fillWithBots() {
 		}
 		await pollHostedMatch(hostedMatchID.value);
 	} catch (e: unknown) {
-		errorMsg.value = e instanceof Error ? e.message : "Failed to fill bots";
+		errorMsg.value = e instanceof Error ? e.message : 'Failed to fill bots';
 	} finally {
 		fillingBots.value = false;
 	}
 }
 
 async function fillBotsForGame(matchID: string) {
-	errorMsg.value = "";
+	errorMsg.value = '';
 	try {
 		const match = await fetchMatch(matchID);
-		if (!match) throw new Error("Match not found");
+		if (!match) throw new Error('Match not found');
 
-		const emptySeats = match.players.filter((p) => !p.name);
+		const emptySeats = match.players.filter(p => !p.name);
 		for (const seat of emptySeats) {
 			const seatID = String(seat.id);
 			const res = await fetch(`${SERVER_URL}/games/${gameDef.id}/${matchID}/join`, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ playerID: seatID, playerName: `Bot ${seatID}` }),
 			});
 			if (!res.ok) throw new Error(`Failed to seat Bot ${seatID}`);
@@ -446,12 +467,12 @@ async function fillBotsForGame(matchID: string) {
 		}
 		await refreshData();
 	} catch (e: unknown) {
-		errorMsg.value = e instanceof Error ? e.message : "Failed to add bots";
+		errorMsg.value = e instanceof Error ? e.message : 'Failed to add bots';
 	}
 }
 
 function inviteLink(): string {
-	if (!hostedMatchID.value) return "";
+	if (!hostedMatchID.value) return '';
 	return `${window.location.origin}/join/${hostedMatchID.value}`;
 }
 
@@ -463,7 +484,7 @@ async function copyLink() {
 			linkCopied.value = false;
 		}, 2000);
 	} catch {
-		errorMsg.value = "Clipboard access denied";
+		errorMsg.value = 'Clipboard access denied';
 	}
 }
 
@@ -475,7 +496,7 @@ function startGame() {
 
 function backToBrowse() {
 	stopPolling();
-	viewMode.value = "browse";
+	viewMode.value = 'browse';
 	hostedMatchID.value = null;
 	hostedPlayers.value = [];
 	refreshData();
@@ -486,14 +507,14 @@ function backToBrowse() {
 // ---------------------------------------------------------------------------
 
 function seatSummary(players: MatchPlayer[]): string {
-	const filled = players.filter((p) => p.name).length;
+	const filled = players.filter(p => p.name).length;
 	return `${filled}/${players.length}`;
 }
 
-function matchStatus(match: MatchInfo): "waiting" | "playing" | "finished" {
-	if (match.gameover) return "finished";
-	if (match.players.every((p) => p.name)) return "playing";
-	return "waiting";
+function matchStatus(match: MatchInfo): 'waiting' | 'playing' | 'finished' {
+	if (match.gameover) return 'finished';
+	if (match.players.every(p => p.name)) return 'playing';
+	return 'waiting';
 }
 
 // ---------------------------------------------------------------------------
@@ -554,10 +575,14 @@ onUnmounted(stopPolling);
 			<template v-if="!isLoggedIn">
 				<div class="max-w-sm mx-auto mt-8 space-y-6">
 					<div class="text-center">
-						<h2 class="text-xl font-semibold">{{ authMode === "login" ? "Sign In" : "Create Account" }}</h2>
+						<h2 class="text-xl font-semibold">
+							{{ authMode === 'login' ? 'Sign In' : 'Create Account' }}
+						</h2>
 						<p class="mt-1 text-sm text-slate-400">
 							{{
-								authMode === "login" ? "Sign in to create and rejoin games from any device." : "Pick a name and a PIN to get started."
+								authMode === 'login'
+									? 'Sign in to create and rejoin games from any device.'
+									: 'Pick a name and a PIN to get started.'
 							}}
 						</p>
 					</div>
@@ -593,7 +618,9 @@ onUnmounted(stopPolling);
 						:disabled="authLoading || !authName.trim() || authPin.length < 4"
 						@click="handleAuth"
 					>
-						{{ authLoading ? "Please wait..." : authMode === "login" ? "Sign In" : "Create Account" }}
+						{{
+							authLoading ? 'Please wait...' : authMode === 'login' ? 'Sign In' : 'Create Account'
+						}}
 					</button>
 
 					<p class="text-center text-sm text-slate-500">
@@ -633,7 +660,9 @@ onUnmounted(stopPolling);
 					class="mb-6 p-3 bg-red-900/30 border border-red-800 rounded-lg text-sm text-red-400 flex items-center justify-between"
 				>
 					<span>{{ errorMsg }}</span>
-					<button class="text-red-400 hover:text-red-300 ml-4" @click="errorMsg = ''">Dismiss</button>
+					<button class="text-red-400 hover:text-red-300 ml-4" @click="errorMsg = ''">
+						Dismiss
+					</button>
 				</div>
 
 				<!-- Loading -->
@@ -654,7 +683,10 @@ onUnmounted(stopPolling);
 						</button>
 
 						<!-- Create form (inline) -->
-						<div v-else class="p-5 bg-slate-800 border border-slate-700 rounded-xl max-w-md space-y-4">
+						<div
+							v-else
+							class="p-5 bg-slate-800 border border-slate-700 rounded-xl max-w-md space-y-4"
+						>
 							<h3 class="font-semibold">New Game</h3>
 
 							<div v-if="!playerCountFixed" class="space-y-2">
@@ -675,17 +707,20 @@ onUnmounted(stopPolling);
 									>
 										+
 									</button>
-									<span class="text-sm text-slate-500 ml-1">({{ gameDef.minPlayers }}&ndash;{{ effectiveMaxPlayers }})</span>
+									<span class="text-sm text-slate-500 ml-1"
+										>({{ gameDef.minPlayers }}&ndash;{{ effectiveMaxPlayers }})</span
+									>
 								</div>
 							</div>
-							<div v-else class="text-sm text-slate-400">
-								{{ gameDef.maxPlayers }} players
-							</div>
+							<div v-else class="text-sm text-slate-400">{{ gameDef.maxPlayers }} players</div>
 
 							<!-- Setup options (driven by gameDef.setupOptions) -->
 							<template v-if="gameDef.setupOptions?.length">
 								<div v-for="opt in gameDef.setupOptions" :key="opt.id" class="space-y-1">
-									<label v-if="opt.type === 'boolean'" class="flex items-center gap-3 cursor-pointer select-none">
+									<label
+										v-if="opt.type === 'boolean'"
+										class="flex items-center gap-3 cursor-pointer select-none"
+									>
 										<button
 											type="button"
 											role="switch"
@@ -701,7 +736,9 @@ onUnmounted(stopPolling);
 										</button>
 										<span class="text-sm font-medium">{{ opt.label }}</span>
 									</label>
-									<p v-if="opt.description" class="text-xs text-slate-500 ml-14">{{ opt.description }}</p>
+									<p v-if="opt.description" class="text-xs text-slate-500 ml-14">
+										{{ opt.description }}
+									</p>
 								</div>
 							</template>
 
@@ -738,7 +775,7 @@ onUnmounted(stopPolling);
 									:disabled="creating"
 									@click="createMatch"
 								>
-									{{ creating ? "Creating..." : "Create" }}
+									{{ creating ? 'Creating...' : 'Create' }}
 								</button>
 								<button
 									class="px-5 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium transition-colors"
@@ -756,7 +793,10 @@ onUnmounted(stopPolling);
 						<section>
 							<h2 class="text-lg font-semibold mb-4 text-slate-300">Your Games</h2>
 
-							<div v-if="myGames.length === 0" class="p-6 bg-slate-800/50 border border-slate-700/50 rounded-xl text-center">
+							<div
+								v-if="myGames.length === 0"
+								class="p-6 bg-slate-800/50 border border-slate-700/50 rounded-xl text-center"
+							>
 								<p class="text-slate-500 text-sm">No active games yet. Create or join one!</p>
 							</div>
 
@@ -777,14 +817,16 @@ onUnmounted(stopPolling);
 												}"
 											/>
 											<span class="text-sm font-medium capitalize">{{ matchStatus(game) }}</span>
-											<span class="text-xs text-slate-500 ml-auto">{{ seatSummary(game.players) }} players</span>
+											<span class="text-xs text-slate-500 ml-auto"
+												>{{ seatSummary(game.players) }} players</span
+											>
 										</div>
 										<p class="text-xs text-slate-500 mt-1">
 											{{
 												game.players
-													.filter((p) => p.name)
-													.map((p) => p.name)
-													.join(", ")
+													.filter(p => p.name)
+													.map(p => p.name)
+													.join(', ')
 											}}
 										</p>
 									</div>
@@ -818,21 +860,28 @@ onUnmounted(stopPolling);
 						<section>
 							<h2 class="text-lg font-semibold mb-4 text-slate-300">Open Games</h2>
 
-							<div v-if="openGames.length === 0" class="p-6 bg-slate-800/50 border border-slate-700/50 rounded-xl text-center">
+							<div
+								v-if="openGames.length === 0"
+								class="p-6 bg-slate-800/50 border border-slate-700/50 rounded-xl text-center"
+							>
 								<p class="text-slate-500 text-sm">No open games right now.</p>
 							</div>
 
 							<div v-else class="space-y-3">
-								<div v-for="game in openGames" :key="game.matchID" class="p-4 bg-slate-800 border border-slate-700 rounded-xl">
+								<div
+									v-for="game in openGames"
+									:key="game.matchID"
+									class="p-4 bg-slate-800 border border-slate-700 rounded-xl"
+								>
 									<div class="flex items-center justify-between">
 										<div>
 											<p class="text-sm font-medium">{{ seatSummary(game.players) }} players</p>
 											<p class="text-xs text-slate-500 mt-0.5">
 												{{
 													game.players
-														.filter((p) => p.name)
-														.map((p) => p.name)
-														.join(", ") || "No players yet"
+														.filter(p => p.name)
+														.map(p => p.name)
+														.join(', ') || 'No players yet'
 												}}
 											</p>
 										</div>
@@ -851,7 +900,10 @@ onUnmounted(stopPolling);
 
 				<!-- HOSTING MODE (waiting room) -->
 				<template v-else-if="viewMode === 'hosting'">
-					<button class="mb-6 text-sm text-slate-500 hover:text-slate-300 transition-colors" @click="backToBrowse">
+					<button
+						class="mb-6 text-sm text-slate-500 hover:text-slate-300 transition-colors"
+						@click="backToBrowse"
+					>
 						&larr; Back to lobby
 					</button>
 
@@ -865,14 +917,16 @@ onUnmounted(stopPolling);
 							<div class="space-y-1">
 								<label class="block text-xs text-slate-500">Invite Link</label>
 								<div class="flex gap-2">
-									<code class="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-blue-400 truncate">
+									<code
+										class="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-blue-400 truncate"
+									>
 										{{ inviteLink() }}
 									</code>
 									<button
 										class="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium transition-colors shrink-0"
 										@click="copyLink"
 									>
-										{{ linkCopied ? "Copied!" : "Copy" }}
+										{{ linkCopied ? 'Copied!' : 'Copy' }}
 									</button>
 								</div>
 							</div>
@@ -881,10 +935,16 @@ onUnmounted(stopPolling);
 						<div class="p-5 bg-slate-800 border border-slate-700 rounded-xl space-y-3">
 							<div class="flex items-center justify-between">
 								<span class="text-sm font-medium text-slate-400">Players</span>
-								<span class="text-sm text-slate-500">{{ filledCount }} / {{ hostedPlayers.length }}</span>
+								<span class="text-sm text-slate-500"
+									>{{ filledCount }} / {{ hostedPlayers.length }}</span
+								>
 							</div>
 							<ul class="space-y-2">
-								<li v-for="p in hostedPlayers" :key="p.id" class="flex items-center gap-3 px-3 py-2.5 bg-slate-900 rounded-lg">
+								<li
+									v-for="p in hostedPlayers"
+									:key="p.id"
+									class="flex items-center gap-3 px-3 py-2.5 bg-slate-900 rounded-lg"
+								>
 									<span
 										class="w-2 h-2 rounded-full shrink-0"
 										:class="
@@ -902,7 +962,7 @@ onUnmounted(stopPolling);
 										"
 									/>
 									<span class="text-sm" :class="p.name ? 'text-white' : 'text-slate-600'">
-										{{ p.name || "Waiting..." }}
+										{{ p.name || 'Waiting...' }}
 									</span>
 									<span v-if="p.id === 0" class="ml-auto text-xs text-slate-500">Host</span>
 								</li>
@@ -914,7 +974,11 @@ onUnmounted(stopPolling);
 							:disabled="!allSeatsFilled"
 							@click="startGame"
 						>
-							{{ allSeatsFilled ? "Start Game" : `Waiting for players (${filledCount}/${hostedPlayers.length})...` }}
+							{{
+								allSeatsFilled
+									? 'Start Game'
+									: `Waiting for players (${filledCount}/${hostedPlayers.length})...`
+							}}
 						</button>
 
 						<div v-if="!allSeatsFilled" class="flex gap-2">
@@ -923,7 +987,7 @@ onUnmounted(stopPolling);
 								:disabled="fillingBots"
 								@click="fillWithBots"
 							>
-								{{ fillingBots ? "Adding..." : "Fill with Bots" }}
+								{{ fillingBots ? 'Adding...' : 'Fill with Bots' }}
 							</button>
 							<button
 								class="flex-1 py-2.5 bg-slate-800 hover:bg-red-900/40 border border-slate-700 hover:border-red-800 rounded-lg text-sm text-slate-400 hover:text-red-400 font-medium transition-colors"
@@ -939,8 +1003,14 @@ onUnmounted(stopPolling);
 
 		<!-- Join game: pick color -->
 		<Teleport to="body">
-			<div v-if="joinModalMatchID" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" @click.self="closeJoinModal">
-				<div class="bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-xl max-w-sm w-full space-y-4">
+			<div
+				v-if="joinModalMatchID"
+				class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+				@click.self="closeJoinModal"
+			>
+				<div
+					class="bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-xl max-w-sm w-full space-y-4"
+				>
 					<h3 class="text-lg font-semibold text-white">Pick your color</h3>
 					<div class="flex flex-wrap gap-2">
 						<button
@@ -949,8 +1019,16 @@ onUnmounted(stopPolling);
 							type="button"
 							class="w-10 h-10 rounded-full border-2 transition-all shrink-0"
 							:class="[
-								joinModalColor === c ? 'border-white scale-110 ring-2 ring-white/50' : 'border-slate-600 hover:border-slate-500',
-								{ red: 'bg-red-500', blue: 'bg-blue-500', green: 'bg-green-500', yellow: 'bg-yellow-400', black: 'bg-slate-700' }[c],
+								joinModalColor === c
+									? 'border-white scale-110 ring-2 ring-white/50'
+									: 'border-slate-600 hover:border-slate-500',
+								{
+									red: 'bg-red-500',
+									blue: 'bg-blue-500',
+									green: 'bg-green-500',
+									yellow: 'bg-yellow-400',
+									black: 'bg-slate-700',
+								}[c],
 							]"
 							:title="c"
 							@click="joinModalColor = c"

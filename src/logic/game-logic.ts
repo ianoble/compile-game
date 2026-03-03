@@ -4,7 +4,7 @@ import type { BaseGameState } from '@engine/client/index';
 import { INVALID_MOVE } from 'boardgame.io/core';
 import type { VisibleCard } from '@engine/client/index';
 import { redactCards } from '@engine/client/index';
-import { getCommandDeck, getProtocolDeck, shuffle } from './compile-cards';
+import { getCommandCardsForProtocols, getProtocolDeck, shuffle } from './compile-cards';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -41,13 +41,13 @@ export interface ColumnState {
 export interface CompilePlayerState {
 	hand: VisibleCard[];
 	protocolCards: VisibleCard[];
+	/** Personal command deck built from drafted protocols */
+	commandDeck: string[];
 }
 
 export interface CompileGameState extends BaseGameState {
 	/** Draft phase: pool of protocol cards to pick from */
 	protocolPool: VisibleCard[];
-	/** Play phase: draw pile (card IDs) */
-	commandDeck: string[];
 	players: Record<string, CompilePlayerState>;
 	/** 3 columns: left, center, right */
 	columns: ColumnState[];
@@ -67,20 +67,19 @@ function createInitialColumns(): ColumnState[] {
 
 function createEmptyPlayers(): Record<string, CompilePlayerState> {
 	return {
-		'0': { hand: [], protocolCards: [] },
-		'1': { hand: [], protocolCards: [] },
+		'0': { hand: [], protocolCards: [], commandDeck: [] },
+		'1': { hand: [], protocolCards: [], commandDeck: [] },
 	};
 }
 
 /** Setup: 2 players only, shuffle decks, start in draft. */
-function setup(ctx: Ctx): CompileGameState {
+function setup({ ctx }: { ctx: Ctx }): CompileGameState {
 	if (ctx.numPlayers !== 2) {
 		throw new Error('Compile is a 2-player game only');
 	}
 	const protocolDeck = shuffle([...getProtocolDeck()]);
 	return {
 		protocolPool: protocolDeck,
-		commandDeck: [],
 		players: createEmptyPlayers(),
 		columns: createInitialColumns(),
 		history: [],
@@ -126,8 +125,12 @@ function playCommandCard(
 	if (handIndex < 0 || handIndex >= hand.length) return INVALID_MOVE;
 
 	const card = hand[handIndex];
-	const cardId = typeof card === 'object' && card && 'id' in card ? (card as VisibleCard).id : String(card);
-	const value = typeof card === 'object' && card && 'value' in card ? (card as VisibleCard & { value: number }).value : 1;
+	const cardId =
+		typeof card === 'object' && card && 'id' in card ? (card as VisibleCard).id : String(card);
+	const value =
+		typeof card === 'object' && card && 'value' in card
+			? (card as VisibleCard & { value: number }).value
+			: 1;
 	player.hand.splice(handIndex, 1);
 	const col = G.columns[columnIndex];
 	col.commandStack.push({
@@ -143,26 +146,34 @@ function playCommandCard(
 	}
 }
 
-/** When draft ends: place protocols on columns, shuffle command deck, deal hands. */
+/** When draft ends: place protocols on columns, build personal decks, deal hands. */
 function onPlayPhaseBegin({ G }: { G: CompileGameState }): void {
 	// Place each player's 3 protocol cards on the 3 columns (one per column)
 	for (let col = 0; col < NUM_COLUMNS; col++) {
 		G.columns[col].protocol[0] = (G.players['0'].protocolCards[col] as VisibleCard)?.id ?? null;
 		G.columns[col].protocol[1] = (G.players['1'].protocolCards[col] as VisibleCard)?.id ?? null;
 	}
-	// Build and shuffle full command deck (with values), then deal 5 each
-	const fullDeck = shuffle([...getCommandDeck()]);
-	let deckIdx = 0;
-	const deal = (playerId: string) => {
+
+	// Build personal command decks for each player from their drafted protocols
+	for (const playerId of ['0', '1']) {
 		const player = G.players[playerId];
-		for (let i = 0; i < HAND_SIZE && deckIdx < fullDeck.length; i++) {
-			const c = fullDeck[deckIdx++];
-			player.hand.push({ id: c.id, name: c.name, value: c.value });
+		const protocolIds = player.protocolCards.map(p => (p as VisibleCard).id);
+		const commandCards = getCommandCardsForProtocols(protocolIds);
+		const shuffledDeck = shuffle([...commandCards]);
+
+		// Deal 5 cards to hand
+		for (let i = 0; i < HAND_SIZE && i < shuffledDeck.length; i++) {
+			const card = shuffledDeck[i];
+			player.hand.push({
+				id: card.id,
+				name: card.name,
+				value: card.value,
+			});
 		}
-	};
-	deal('0');
-	deal('1');
-	G.commandDeck = fullDeck.slice(deckIdx).map((c) => c.id);
+
+		// Remaining cards go to player's personal deck
+		player.commandDeck = shuffledDeck.slice(HAND_SIZE).map(c => c.id);
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -211,7 +222,7 @@ export const CompileGame: Game<CompileGameState> = {
 		if (!G.columns?.length) return undefined;
 		for (const playerId of ['0', '1'] as const) {
 			const p = playerId === '0' ? 0 : 1;
-			const allCompiled = G.columns.every((col) => col.protocolCompiled?.[p]);
+			const allCompiled = G.columns.every(col => col.protocolCompiled?.[p]);
 			if (allCompiled) return { winner: playerId };
 		}
 		return undefined;
@@ -234,7 +245,11 @@ export const gameDef = defineGame<CompileGameState>({
 		if (playerID !== currentPlayer) return 'Not your turn';
 		if (moveName === 'draftProtocol') {
 			const [poolIndex] = args as [number];
-			if (typeof poolIndex !== 'number' || poolIndex < 0 || poolIndex >= (G.protocolPool?.length ?? 0))
+			if (
+				typeof poolIndex !== 'number' ||
+				poolIndex < 0 ||
+				poolIndex >= (G.protocolPool?.length ?? 0)
+			)
 				return 'Invalid protocol pick';
 			return true;
 		}
@@ -257,11 +272,11 @@ export const gameDef = defineGame<CompileGameState>({
 		// Hide opponent's hand
 		stripped.players[otherId] = {
 			...stripped.players[otherId],
-			hand: redactCards(stripped.players[otherId].hand as VisibleCard[]),
+			hand: redactCards(stripped.players[otherId].hand as VisibleCard[]) as any,
 		};
 		// Hide face-down cards owned by opponent
 		for (const col of stripped.columns) {
-			col.commandStack = col.commandStack.map((entry) => {
+			col.commandStack = col.commandStack.map(entry => {
 				if (entry.owner === otherId && !entry.faceUp) {
 					return { cardId: '[hidden]', owner: entry.owner, faceUp: false, value: 0 };
 				}

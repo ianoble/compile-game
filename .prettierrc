@@ -1,0 +1,28 @@
+{
+	"semi": true,
+	"singleQuote": true,
+	"useTabs": true,
+	"tabWidth": 2,
+	"trailingComma": "es5",
+	"printWidth": 100,
+	"endOfLine": "lf",
+	"bracketSpacing": true,
+	"arrowParens": "avoid",
+	"htmlWhitespaceSensitivity": "css",
+	"vueIndentScriptAndStyle": false,
+	"overrides": [
+		{
+			"files": "*.vue",
+			"options": {
+				"parser": "vue"
+			}
+		},
+		{
+			"files": "*.html",
+			"options": {
+				"parser": "html",
+				"htmlWhitespaceSensitivity": "strict"
+			}
+		}
+	]
+}

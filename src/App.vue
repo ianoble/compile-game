@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { NobleProvider } from "@engine/client/index";
-import { SERVER_URL } from "./config";
+import { NobleProvider } from '@engine/client/index';
+import { SERVER_URL } from './config';
 </script>
 
 <template>

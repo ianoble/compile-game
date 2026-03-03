@@ -12,6 +12,11 @@
 		"jsx": "preserve",
 		"noEmit": true,
 		"baseUrl": ".",
+		// Additional strict settings (moderate level)
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+		"noImplicitReturns": true,
+		"noFallthroughCasesInSwitch": true,
 		"paths": {
 			"@/*": ["src/*"],
 			"@engine/client": ["noble-bg-engine/packages/engine/src/client/index.ts"],

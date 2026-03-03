@@ -9,45 +9,62 @@ export interface CommandCard extends VisibleCard {
 	name?: string;
 	/** Value that contributes to column total; when column sum >= 10, that player's protocol compiles. */
 	value: number;
+	/** Protocol this command belongs to */
+	protocolId: string;
 }
 
 export interface ProtocolCard extends VisibleCard {
 	id: string;
 	name?: string;
+	/** Associated command cards for this protocol */
+	commandCards: CommandCard[];
 }
 
 // ---------------------------------------------------------------------------
-// Deck definitions: 72 command, 12 protocol
+// Deck definitions: 6 command cards per protocol, 12 protocols
 // ---------------------------------------------------------------------------
 
-const COMMAND_COUNT = 72;
+const COMMANDS_PER_PROTOCOL = 6;
 const PROTOCOL_COUNT = 12;
 
-/** Values 1–6, 12 of each, so column sums can reach 10. */
+/** Values 1–6, one of each per protocol */
 const COMMAND_VALUES = [1, 2, 3, 4, 5, 6] as const;
-const VALUES_PER_CARD = COMMAND_COUNT / COMMAND_VALUES.length; // 12
 
-function createCommandDeck(): CommandCard[] {
-	const deck: CommandCard[] = [];
-	for (let i = 1; i <= COMMAND_COUNT; i++) {
-		const valueIndex = Math.floor((i - 1) / VALUES_PER_CARD) % COMMAND_VALUES.length;
-		const value = COMMAND_VALUES[valueIndex];
-		deck.push({ id: `command-${i}`, name: `Command ${i}`, value });
+function createCommandCardsForProtocol(protocolId: string): CommandCard[] {
+	const cards: CommandCard[] = [];
+	for (let i = 0; i < COMMANDS_PER_PROTOCOL; i++) {
+		const value = COMMAND_VALUES[i];
+		cards.push({
+			id: `${protocolId}-command-${value}`,
+			name: `${protocolId.replace('protocol-', 'P')} Command ${value}`,
+			value,
+			protocolId,
+		});
 	}
-	return deck;
+	return cards;
 }
 
 function createProtocolDeck(): ProtocolCard[] {
 	const deck: ProtocolCard[] = [];
 	for (let i = 1; i <= PROTOCOL_COUNT; i++) {
-		deck.push({ id: `protocol-${i}`, name: `Protocol ${i}` });
+		const protocolId = `protocol-${i}`;
+		const commandCards = createCommandCardsForProtocol(protocolId);
+		deck.push({
+			id: protocolId,
+			name: `Protocol ${i}`,
+			commandCards,
+		});
 	}
 	return deck;
 }
 
-/** Fresh command deck (72 cards). */
-export function getCommandDeck(): CommandCard[] {
-	return createCommandDeck();
+/** Get all command cards for the given protocol IDs */
+export function getCommandCardsForProtocols(protocolIds: string[]): CommandCard[] {
+	const allCards: CommandCard[] = [];
+	for (const protocolId of protocolIds) {
+		allCards.push(...createCommandCardsForProtocol(protocolId));
+	}
+	return allCards;
 }
 
 /** Fresh protocol deck (12 cards). */
@@ -64,4 +81,4 @@ export function shuffle<T>(array: T[]): T[] {
 	return array;
 }
 
-export { COMMAND_COUNT, PROTOCOL_COUNT };
+export { COMMANDS_PER_PROTOCOL, PROTOCOL_COUNT };
