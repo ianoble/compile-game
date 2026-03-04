@@ -22,7 +22,29 @@ const { isConnected, isMyTurn, state, gameover, reconnecting, connect, disconnec
 	useGame();
 
 const G = computed(() => state.value as unknown as CompileGameState | undefined);
-const phase = computed(() => ctx.value?.phase ?? '');
+// Use ctx.phase when present; infer from G when server doesn't send phase (e.g. some boardgame.io setups)
+const phase = computed(() => {
+	const p = ctx.value?.phase;
+	if (p === 'draft' || p === 'play') return p;
+	const g = G.value;
+	if (!g || typeof g !== 'object') {
+		// Connected but no G yet or G empty → show draft so UI isn't stuck on "Loading"
+		if (isConnected.value) return 'draft';
+		return '';
+	}
+	// Play: columns exist and have protocol cards placed (play phase has started)
+	if (Array.isArray(g.columns) && g.columns.length === 3) {
+		const col = g.columns[0];
+		if (col && (col.protocol?.[0] != null || col.protocol?.[1] != null)) return 'play';
+	}
+	// Draft: we have game state but protocol slots not filled yet
+	if (Array.isArray(g.protocolPool)) return 'draft';
+	// Fallback: state has our shape (history) and columns not filled → assume draft
+	if (Array.isArray((g as CompileGameState).history) && (!Array.isArray(g.columns) || g.columns.length === 0)) return 'draft';
+	if (Array.isArray(g.columns) && g.columns.length === 3) return 'play';
+	// Any other state shape when connected → show draft
+	return 'draft';
+});
 
 const {
 	requestPermission: requestTurnNotifications,
@@ -238,17 +260,18 @@ async function abandonGame() {
 </script>
 
 <template>
-	<div class="min-h-screen bg-slate-900 text-white flex flex-col items-center">
+	<div class="min-h-screen flex flex-col items-center" style="background: var(--cyber-bg);">
 		<div
 			ref="headerEl"
-			class="fixed top-0 left-0 right-0 z-40 bg-slate-900 border-b border-slate-700/60"
+			class="fixed top-0 left-0 right-0 z-40 border-b border-cyan-500/20"
+			style="background: var(--cyber-surface);"
 		>
 			<div
 				class="max-w-5xl mx-auto flex flex-wrap md:flex-nowrap items-center justify-between px-3 md:px-6 py-1.5 md:py-2 gap-x-3 gap-y-0.5"
 			>
 				<router-link
 					to="/"
-					class="text-xs md:text-sm text-slate-500 hover:text-slate-300 transition-colors shrink-0"
+					class="text-xs md:text-sm text-cyan-400/80 hover:text-cyan-300 transition-colors shrink-0 font-display"
 				>
 					&larr; Back
 				</router-link>
@@ -256,12 +279,12 @@ async function abandonGame() {
 				<div class="flex flex-col items-center order-first md:order-none w-full md:w-auto">
 					<div class="relative game-menu-container my-1 md:my-2">
 						<button
-							class="flex items-center gap-1 text-sm md:text-lg font-semibold text-white leading-tight hover:text-slate-300 transition-colors"
+							class="flex items-center gap-1 text-sm md:text-lg font-semibold text-cyan-100 leading-tight hover:text-cyan-300 transition-colors font-display"
 							@click.stop="gameMenuOpen = !gameMenuOpen"
 						>
 							{{ gameDef.displayName }}
 							<svg
-								class="w-3 h-3 md:w-4 md:h-4 text-slate-400 transition-transform"
+								class="w-3 h-3 md:w-4 md:h-4 text-cyan-500/70 transition-transform"
 								:class="gameMenuOpen ? 'rotate-180' : ''"
 								viewBox="0 0 20 20"
 								fill="currentColor"
@@ -275,12 +298,13 @@ async function abandonGame() {
 						</button>
 						<div
 							v-if="gameMenuOpen"
-							class="absolute top-full mt-1 left-1/2 -translate-x-1/2 bg-slate-800 border border-slate-700 rounded-lg shadow-xl py-1 min-w-[180px] z-50"
+							class="absolute top-full mt-1 left-1/2 -translate-x-1/2 rounded-lg shadow-xl py-1 min-w-[180px] z-50 cyber-panel border-cyan-500/30"
+							style="background: var(--cyber-panel);"
 						>
 							<button
 								v-if="notificationsSupported && notificationPermission !== 'granted'"
 								type="button"
-								class="flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors w-full text-left"
+								class="flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:bg-cyan-500/10 hover:text-cyan-200 transition-colors w-full text-left"
 								@click="onEnableTurnNotifications"
 							>
 								<svg
@@ -297,7 +321,7 @@ async function abandonGame() {
 							</button>
 							<p
 								v-else-if="notificationsSupported && notificationPermission === 'granted'"
-								class="flex items-center gap-2 px-4 py-2 text-sm text-emerald-400/90"
+								class="flex items-center gap-2 px-4 py-2 text-sm text-green-400"
 							>
 								<svg
 									class="w-4 h-4"
@@ -315,25 +339,25 @@ async function abandonGame() {
 					</div>
 					<div
 						v-if="G"
-						class="flex items-center gap-2 md:gap-3 text-[10px] md:text-xs text-slate-400 mb-0.5 md:mb-1 min-h-5 md:min-h-6"
+						class="flex items-center gap-2 md:gap-3 text-[10px] md:text-xs mb-0.5 md:mb-1 min-h-5 md:min-h-6"
 					>
 						<template v-if="isMyTurn">
-							<span class="text-emerald-400 font-medium animate-pulse">Your turn</span>
+							<span class="text-cyan-400 font-medium animate-pulse" style="text-shadow: 0 0 8px rgba(34, 211, 238, 0.6);">Your turn</span>
 						</template>
 						<template v-else>
-							<span class="text-slate-400">Opponent's turn</span>
+							<span class="text-slate-500">Opponent's turn</span>
 						</template>
 					</div>
 				</div>
 
 				<div class="flex items-center gap-2 md:gap-3 shrink-0">
 					<span
-						class="px-2 md:px-2.5 py-0.5 md:py-1 rounded-full text-[10px] md:text-xs"
-						:class="isConnected ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'"
+						class="px-2 md:px-2.5 py-0.5 md:py-1 rounded-full text-[10px] md:text-xs border"
+						:class="isConnected ? 'bg-green-500/10 text-green-400 border-green-500/30' : 'bg-red-500/10 text-red-400 border-red-500/30'"
 						>{{ isConnected ? 'Connected' : 'Connecting...' }}</span
 					>
 					<button
-						class="text-[10px] md:text-xs text-red-500/60 hover:text-red-400 transition-colors"
+						class="text-[10px] md:text-xs text-red-400/80 hover:text-red-300 transition-colors"
 						@click="handleAbandonClick"
 					>
 						Abandon
@@ -351,26 +375,31 @@ async function abandonGame() {
 				:style="{ top: headerHeight + 12 + 'px' }"
 			>
 				<div
-					class="px-6 py-2.5 rounded-lg shadow-lg border font-semibold text-center text-sm md:text-base bg-emerald-900/95 border-emerald-500/60 text-emerald-200"
+					class="px-6 py-2.5 rounded-lg font-semibold text-center text-sm md:text-base font-display text-cyan-100 border border-cyan-500/50"
+					style="background: rgba(6, 78, 99, 0.9); box-shadow: 0 0 20px rgba(34, 211, 238, 0.4);"
 				>
 					{{ turnCueMessage }}
 				</div>
 			</div>
 		</Transition>
 
-		<div class="w-full flex flex-col items-center p-2 md:p-6">
-			<div v-if="gameover" class="mb-6 text-center">
-				<p v-if="gameover.winner === playerID" class="text-2xl font-bold text-green-400">
+		<div class="w-full flex flex-col min-h-0">
+			<div
+				class="w-full flex flex-col items-center p-2 md:p-6 flex-1"
+				:class="{ 'pb-[200px]': !reconnecting && phase === 'play' }"
+			>
+				<div v-if="gameover" class="mb-6 text-center font-display">
+				<p v-if="gameover.winner === playerID" class="text-2xl font-bold text-green-400" style="text-shadow: 0 0 12px rgba(74, 222, 128, 0.5);">
 					You win!
 				</p>
-				<p v-else-if="gameover.winner !== undefined" class="text-2xl font-bold text-red-400">
+				<p v-else-if="gameover.winner !== undefined" class="text-2xl font-bold text-red-400" style="text-shadow: 0 0 12px rgba(248, 113, 113, 0.4);">
 					You lose.
 				</p>
 				<p v-else class="text-2xl font-bold text-slate-400">It's a draw.</p>
 			</div>
 
 			<div v-if="reconnecting" class="text-center">
-				<p class="text-slate-400">Reconnecting...</p>
+				<p class="text-cyan-400/80">Reconnecting...</p>
 			</div>
 
 			<DraftProtocol v-if="!reconnecting && phase === 'draft'" />
@@ -379,18 +408,35 @@ async function abandonGame() {
 				:header-height="headerHeight"
 				@back-to-lobby="router.push('/')"
 			/>
-			<div v-else-if="!reconnecting" class="text-center text-slate-400">Loading game...</div>
+			<div v-else-if="!reconnecting && !isConnected" class="text-center text-slate-400 space-y-2">
+				<p>Connecting to game...</p>
+				<p class="text-xs">Make sure the game server is running (e.g. on port 8000).</p>
+			</div>
+			<div v-else-if="!reconnecting" class="text-center text-slate-400 space-y-3 max-w-md">
+				<p>Loading game...</p>
+				<p class="text-xs text-left">
+					You should see the <strong>draft screen</strong>: 12 protocol cards to pick from, and &quot;Your protocols (0/3)&quot;.
+					If this never loads, the server may not be sending game state. Ensure the backend is running and registered the Compile game with phases.
+				</p>
+			</div>
+			</div>
+			<div
+				v-if="phase === 'play' && !reconnecting"
+				id="game-hand-tray"
+				class="game-hand-tray fixed bottom-0 left-0 right-0 z-10 min-h-[180px] pointer-events-none"
+			/>
 		</div>
 
 		<Teleport to="body">
 			<div
 				v-if="abandonVoteStatus"
-				class="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+				class="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
 			>
 				<div
-					class="bg-slate-800 border border-slate-700 rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl"
+					class="rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl cyber-panel border-cyan-500/30"
+					style="background: var(--cyber-panel);"
 				>
-					<h3 class="text-lg font-semibold text-white mb-1">Abandon Vote</h3>
+					<h3 class="text-lg font-semibold text-cyan-100 mb-1 font-display">Abandon Vote</h3>
 					<p class="text-sm text-slate-400 mb-5">
 						{{ abandonVoteStatus.voters.length }} of {{ abandonVoteStatus.totalHumans }} players
 						want to abandon.
@@ -411,7 +457,7 @@ async function abandonGame() {
 					<div class="flex gap-3">
 						<template v-if="iHaveVoted">
 							<button
-								class="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 transition-colors"
+								class="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium text-cyan-200 hover:text-cyan-100 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 transition-colors"
 								@click="handleCancelVote"
 							>
 								Cancel My Vote
@@ -419,7 +465,7 @@ async function abandonGame() {
 						</template>
 						<template v-else>
 							<button
-								class="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium text-white bg-red-600 hover:bg-red-500 transition-colors"
+								class="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium text-white bg-red-600 hover:bg-red-500 border border-red-500/50 transition-colors"
 								@click="handleAgreeVote"
 							>
 								Agree to Abandon
@@ -433,25 +479,26 @@ async function abandonGame() {
 		<Teleport to="body">
 			<div
 				v-if="confirmingAbandon"
-				class="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+				class="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
 				@click.self="confirmingAbandon = false"
 			>
 				<div
-					class="bg-slate-800 border border-slate-700 rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl"
+					class="rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl cyber-panel border-cyan-500/30"
+					style="background: var(--cyber-panel);"
 				>
-					<h3 class="text-lg font-semibold text-white mb-2">Abandon game?</h3>
+					<h3 class="text-lg font-semibold text-cyan-100 mb-2 font-display">Abandon game?</h3>
 					<p class="text-sm text-slate-400 mb-6">
 						This will remove you from the game. This action cannot be undone.
 					</p>
 					<div class="flex justify-end gap-3">
 						<button
-							class="px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 transition-colors"
+							class="px-4 py-2 rounded-lg text-sm text-cyan-200 hover:text-cyan-100 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 transition-colors"
 							@click="confirmingAbandon = false"
 						>
 							Cancel
 						</button>
 						<button
-							class="px-4 py-2 rounded-lg text-sm font-medium text-white bg-red-600 hover:bg-red-500 transition-colors"
+							class="px-4 py-2 rounded-lg text-sm font-medium text-white bg-red-600 hover:bg-red-500 border border-red-500/50 transition-colors"
 							@click="abandonGame"
 						>
 							Abandon

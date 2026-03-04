@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { saveSession, loadSession, clearSession } from '@engine/client/index';
 import { gameDef, PLAYER_COLORS, type PlayerColor } from '../logic/game-logic';
+import { getCompileSetupData } from '../logic/compile-cards';
 import { SERVER_URL } from '../config';
 import {
 	useAuth,
@@ -242,7 +243,7 @@ async function createMatch() {
 			headers: { 'Content-Type': 'application/json', ...authHeaders() },
 			body: JSON.stringify({
 				numPlayers: numPlayers.value,
-				setupData: setupData.value,
+				setupData: gameDef.id === 'compile' ? getCompileSetupData() : setupData.value,
 			}),
 		});
 		if (createRes.status === 403) throw new Error('Authentication required to create games');
@@ -545,21 +546,21 @@ onUnmounted(stopPolling);
 </script>
 
 <template>
-	<div class="min-h-screen bg-slate-900 text-white">
+	<div class="min-h-screen text-white" style="background: var(--cyber-bg);">
 		<!-- Header -->
-		<header class="border-b border-slate-800">
+		<header class="border-b border-cyan-500/20" style="background: var(--cyber-surface);">
 			<div class="max-w-5xl mx-auto px-6 py-8">
 				<div class="flex items-start justify-between">
 					<div>
-						<h1 class="text-4xl font-bold tracking-tight">{{ gameDef.displayName }}</h1>
+						<h1 class="text-4xl font-bold tracking-tight font-display text-cyan-100" style="text-shadow: 0 0 20px rgba(34, 211, 238, 0.3);">{{ gameDef.displayName }}</h1>
 						<p class="mt-2 text-slate-400">{{ gameDef.description }}</p>
 					</div>
 					<div v-if="isLoggedIn" class="flex items-center gap-3 shrink-0">
 						<span class="text-sm text-slate-400"
-							>Signed in as <strong class="text-white">{{ playerName }}</strong></span
+							>Signed in as <strong class="text-cyan-200">{{ playerName }}</strong></span
 						>
 						<button
-							class="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-300 border border-slate-700 hover:border-slate-600 rounded-lg transition-colors"
+							class="px-3 py-1.5 text-xs text-cyan-400/80 hover:text-cyan-300 border border-cyan-500/30 hover:border-cyan-500/50 rounded-lg transition-colors"
 							@click="handleLogout"
 						>
 							Sign Out
@@ -594,7 +595,8 @@ onUnmounted(stopPolling);
 								v-model="authName"
 								placeholder="Your display name"
 								maxlength="24"
-								class="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+								class="w-full px-4 py-2.5 rounded-lg text-white placeholder-slate-500 transition-colors border border-cyan-500/30 focus:border-cyan-400"
+								style="background: var(--cyber-panel);"
 								@keyup.enter="handleAuth"
 							/>
 						</div>
@@ -605,7 +607,8 @@ onUnmounted(stopPolling);
 								type="password"
 								placeholder="4-8 characters"
 								maxlength="8"
-								class="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+								class="w-full px-4 py-2.5 rounded-lg text-white placeholder-slate-500 transition-colors border border-cyan-500/30 focus:border-cyan-400"
+								style="background: var(--cyber-panel);"
 								@keyup.enter="handleAuth"
 							/>
 						</div>
@@ -614,7 +617,8 @@ onUnmounted(stopPolling);
 					<p v-if="loginError" class="text-sm text-red-400 text-center">{{ loginError }}</p>
 
 					<button
-						class="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold transition-colors disabled:opacity-50"
+						class="w-full py-3 rounded-lg font-semibold transition-colors disabled:opacity-50 font-display text-cyan-950 border border-cyan-400/50"
+						style="background: linear-gradient(180deg, #22d3ee 0%, #0891b2 100%); box-shadow: 0 0 16px rgba(34, 211, 238, 0.4);"
 						:disabled="authLoading || !authName.trim() || authPin.length < 4"
 						@click="handleAuth"
 					>
@@ -627,7 +631,7 @@ onUnmounted(stopPolling);
 						<template v-if="authMode === 'login'">
 							Don't have an account?
 							<button
-								class="text-blue-400 hover:text-blue-300 font-medium"
+								class="text-cyan-400 hover:text-cyan-300 font-medium"
 								@click="
 									authMode = 'register';
 									loginError = '';
@@ -639,7 +643,7 @@ onUnmounted(stopPolling);
 						<template v-else>
 							Already have an account?
 							<button
-								class="text-blue-400 hover:text-blue-300 font-medium"
+								class="text-cyan-400 hover:text-cyan-300 font-medium"
 								@click="
 									authMode = 'login';
 									loginError = '';
@@ -657,7 +661,7 @@ onUnmounted(stopPolling);
 				<!-- Error banner -->
 				<div
 					v-if="errorMsg"
-					class="mb-6 p-3 bg-red-900/30 border border-red-800 rounded-lg text-sm text-red-400 flex items-center justify-between"
+					class="mb-6 p-3 bg-red-500/10 border border-red-500/40 rounded-lg text-sm text-red-400 flex items-center justify-between"
 				>
 					<span>{{ errorMsg }}</span>
 					<button class="text-red-400 hover:text-red-300 ml-4" @click="errorMsg = ''">
@@ -667,7 +671,7 @@ onUnmounted(stopPolling);
 
 				<!-- Loading -->
 				<div v-if="loading" class="text-center py-16">
-					<p class="text-slate-400">Connecting to server...</p>
+					<p class="text-cyan-400/80">Connecting to server...</p>
 				</div>
 
 				<!-- BROWSE MODE -->
@@ -676,7 +680,8 @@ onUnmounted(stopPolling);
 					<div class="mb-8">
 						<button
 							v-if="!showCreateForm"
-							class="px-6 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold transition-colors"
+							class="px-6 py-3 rounded-lg font-semibold transition-colors font-display text-cyan-950 border border-cyan-400/50"
+							style="background: linear-gradient(180deg, #22d3ee 0%, #0891b2 100%); box-shadow: 0 0 16px rgba(34, 211, 238, 0.4);"
 							@click="showCreateForm = true"
 						>
 							Create New Game
@@ -685,23 +690,26 @@ onUnmounted(stopPolling);
 						<!-- Create form (inline) -->
 						<div
 							v-else
-							class="p-5 bg-slate-800 border border-slate-700 rounded-xl max-w-md space-y-4"
+							class="p-5 rounded-xl max-w-md space-y-4 cyber-panel border-cyan-500/30"
+							style="background: var(--cyber-panel);"
 						>
-							<h3 class="font-semibold">New Game</h3>
+							<h3 class="font-semibold font-display text-cyan-100">New Game</h3>
 
 							<div v-if="!playerCountFixed" class="space-y-2">
 								<label class="block text-sm text-slate-400">Number of Players</label>
 								<div class="flex items-center gap-3">
 									<button
-										class="w-9 h-9 rounded-lg bg-slate-700 border border-slate-600 text-lg font-bold hover:bg-slate-600 transition-colors disabled:opacity-40"
+										class="w-9 h-9 rounded-lg text-lg font-bold transition-colors disabled:opacity-40 border border-cyan-500/30 hover:border-cyan-500/50"
+										style="background: var(--cyber-panel);"
 										:disabled="numPlayers <= gameDef.minPlayers"
 										@click="numPlayers--"
 									>
 										-
 									</button>
-									<span class="text-xl font-bold w-6 text-center">{{ numPlayers }}</span>
+									<span class="text-xl font-bold w-6 text-center text-cyan-200">{{ numPlayers }}</span>
 									<button
-										class="w-9 h-9 rounded-lg bg-slate-700 border border-slate-600 text-lg font-bold hover:bg-slate-600 transition-colors disabled:opacity-40"
+										class="w-9 h-9 rounded-lg text-lg font-bold transition-colors disabled:opacity-40 border border-cyan-500/30 hover:border-cyan-500/50"
+										style="background: var(--cyber-panel);"
 										:disabled="numPlayers >= effectiveMaxPlayers"
 										@click="numPlayers++"
 									>
@@ -771,14 +779,16 @@ onUnmounted(stopPolling);
 
 							<div class="flex gap-2">
 								<button
-									class="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold text-sm transition-colors disabled:opacity-50"
+									class="px-5 py-2.5 rounded-lg font-semibold text-sm transition-colors disabled:opacity-50 font-display text-cyan-950 border border-cyan-400/50"
+									style="background: linear-gradient(180deg, #22d3ee 0%, #0891b2 100%);"
 									:disabled="creating"
 									@click="createMatch"
 								>
 									{{ creating ? 'Creating...' : 'Create' }}
 								</button>
 								<button
-									class="px-5 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium transition-colors"
+									class="px-5 py-2.5 rounded-lg text-sm font-medium transition-colors border border-cyan-500/30 text-cyan-200 hover:bg-cyan-500/10"
+									style="background: var(--cyber-panel);"
 									@click="showCreateForm = false"
 								>
 									Cancel
@@ -791,11 +801,12 @@ onUnmounted(stopPolling);
 					<div class="grid md:grid-cols-2 gap-8">
 						<!-- Your Games -->
 						<section>
-							<h2 class="text-lg font-semibold mb-4 text-slate-300">Your Games</h2>
+							<h2 class="text-lg font-semibold mb-4 font-display text-cyan-200">Your Games</h2>
 
 							<div
 								v-if="myGames.length === 0"
-								class="p-6 bg-slate-800/50 border border-slate-700/50 rounded-xl text-center"
+								class="p-6 rounded-xl text-center cyber-panel border-cyan-500/20"
+								style="background: var(--cyber-panel);"
 							>
 								<p class="text-slate-500 text-sm">No active games yet. Create or join one!</p>
 							</div>
@@ -804,7 +815,8 @@ onUnmounted(stopPolling);
 								<div
 									v-for="game in myGames"
 									:key="game.matchID"
-									class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden"
+									class="rounded-xl overflow-hidden cyber-panel border-cyan-500/30 cyber-panel-hover"
+									style="background: var(--cyber-panel);"
 								>
 									<div class="p-4">
 										<div class="flex items-center gap-2 mb-1">
@@ -830,23 +842,23 @@ onUnmounted(stopPolling);
 											}}
 										</p>
 									</div>
-									<div class="flex border-t border-slate-700 divide-x divide-slate-700">
+									<div class="flex border-t border-cyan-500/20 divide-x divide-cyan-500/20">
 										<button
-											class="flex-1 px-3 py-2 text-xs font-medium text-blue-400 hover:bg-slate-700/50 transition-colors"
+											class="flex-1 px-3 py-2 text-xs font-medium text-cyan-400 hover:bg-cyan-500/10 transition-colors"
 											@click="router.push(`/game/${game.matchID}/${game.myPlayerID}`)"
 										>
 											Resume
 										</button>
 										<button
 											v-if="matchStatus(game) === 'waiting' && game.myPlayerID === '0'"
-											class="flex-1 px-3 py-2 text-xs font-medium text-slate-400 hover:bg-slate-700/50 transition-colors"
+											class="flex-1 px-3 py-2 text-xs font-medium text-slate-400 hover:bg-cyan-500/10 transition-colors"
 											@click="fillBotsForGame(game.matchID)"
 										>
 											Add Bots
 										</button>
 										<button
 											v-if="game.myPlayerID === '0'"
-											class="flex-1 px-3 py-2 text-xs font-medium text-red-400/70 hover:bg-red-900/20 hover:text-red-400 transition-colors"
+											class="flex-1 px-3 py-2 text-xs font-medium text-red-400/70 hover:bg-red-500/10 hover:text-red-400 transition-colors"
 											@click="abandonGame(game.matchID)"
 										>
 											Abandon
@@ -858,11 +870,12 @@ onUnmounted(stopPolling);
 
 						<!-- Open Games -->
 						<section>
-							<h2 class="text-lg font-semibold mb-4 text-slate-300">Open Games</h2>
+							<h2 class="text-lg font-semibold mb-4 font-display text-cyan-200">Open Games</h2>
 
 							<div
 								v-if="openGames.length === 0"
-								class="p-6 bg-slate-800/50 border border-slate-700/50 rounded-xl text-center"
+								class="p-6 rounded-xl text-center cyber-panel border-cyan-500/20"
+								style="background: var(--cyber-panel);"
 							>
 								<p class="text-slate-500 text-sm">No open games right now.</p>
 							</div>
@@ -871,7 +884,8 @@ onUnmounted(stopPolling);
 								<div
 									v-for="game in openGames"
 									:key="game.matchID"
-									class="p-4 bg-slate-800 border border-slate-700 rounded-xl"
+									class="p-4 rounded-xl cyber-panel border-cyan-500/30"
+									style="background: var(--cyber-panel);"
 								>
 									<div class="flex items-center justify-between">
 										<div>
@@ -886,7 +900,8 @@ onUnmounted(stopPolling);
 											</p>
 										</div>
 										<button
-											class="px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-sm font-semibold transition-colors"
+											class="px-4 py-2 rounded-lg text-sm font-semibold transition-colors font-display text-cyan-950 border border-cyan-400/50"
+											style="background: linear-gradient(180deg, #22d3ee 0%, #0891b2 100%); box-shadow: 0 0 12px rgba(34, 211, 238, 0.3);"
 											@click="openJoinModal(game)"
 										>
 											Join
@@ -901,29 +916,31 @@ onUnmounted(stopPolling);
 				<!-- HOSTING MODE (waiting room) -->
 				<template v-else-if="viewMode === 'hosting'">
 					<button
-						class="mb-6 text-sm text-slate-500 hover:text-slate-300 transition-colors"
+						class="mb-6 text-sm text-cyan-400/80 hover:text-cyan-300 transition-colors"
 						@click="backToBrowse"
 					>
 						&larr; Back to lobby
 					</button>
 
 					<div class="max-w-md mx-auto space-y-6">
-						<div class="p-5 bg-slate-800 border border-slate-700 rounded-xl space-y-4">
+						<div class="p-5 rounded-xl space-y-4 cyber-panel border-cyan-500/30" style="background: var(--cyber-panel);">
 							<div class="flex items-center gap-2">
-								<span class="inline-block w-2 h-2 rounded-full bg-green-400" />
-								<h3 class="font-semibold">Game Created</h3>
+								<span class="inline-block w-2 h-2 rounded-full bg-green-400" style="box-shadow: 0 0 8px rgba(74, 222, 128, 0.8);" />
+								<h3 class="font-semibold font-display text-cyan-100">Game Created</h3>
 							</div>
 
 							<div class="space-y-1">
 								<label class="block text-xs text-slate-500">Invite Link</label>
 								<div class="flex gap-2">
 									<code
-										class="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-blue-400 truncate"
+										class="flex-1 px-3 py-2 rounded-lg text-sm text-cyan-400 truncate border border-cyan-500/30"
+										style="background: var(--cyber-bg);"
 									>
 										{{ inviteLink() }}
 									</code>
 									<button
-										class="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium transition-colors shrink-0"
+										class="px-3 py-2 rounded-lg text-sm font-medium transition-colors shrink-0 border border-cyan-500/30 text-cyan-200 hover:bg-cyan-500/10"
+										style="background: var(--cyber-panel);"
 										@click="copyLink"
 									>
 										{{ linkCopied ? 'Copied!' : 'Copy' }}
@@ -932,7 +949,7 @@ onUnmounted(stopPolling);
 							</div>
 						</div>
 
-						<div class="p-5 bg-slate-800 border border-slate-700 rounded-xl space-y-3">
+						<div class="p-5 rounded-xl space-y-3 cyber-panel border-cyan-500/30" style="background: var(--cyber-panel);">
 							<div class="flex items-center justify-between">
 								<span class="text-sm font-medium text-slate-400">Players</span>
 								<span class="text-sm text-slate-500"
@@ -943,7 +960,8 @@ onUnmounted(stopPolling);
 								<li
 									v-for="p in hostedPlayers"
 									:key="p.id"
-									class="flex items-center gap-3 px-3 py-2.5 bg-slate-900 rounded-lg"
+									class="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-cyan-500/20"
+									style="background: var(--cyber-bg);"
 								>
 									<span
 										class="w-2 h-2 rounded-full shrink-0"
@@ -970,7 +988,8 @@ onUnmounted(stopPolling);
 						</div>
 
 						<button
-							class="w-full py-3 bg-green-600 hover:bg-green-500 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+							class="w-full py-3 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-display text-cyan-950 border border-cyan-400/50"
+							style="background: linear-gradient(180deg, #22d3ee 0%, #0891b2 100%); box-shadow: 0 0 16px rgba(34, 211, 238, 0.4);"
 							:disabled="!allSeatsFilled"
 							@click="startGame"
 						>
@@ -983,14 +1002,16 @@ onUnmounted(stopPolling);
 
 						<div v-if="!allSeatsFilled" class="flex gap-2">
 							<button
-								class="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-sm text-slate-400 hover:text-white font-medium transition-colors disabled:opacity-50"
+								class="flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 border border-cyan-500/30 text-cyan-200 hover:bg-cyan-500/10"
+								style="background: var(--cyber-panel);"
 								:disabled="fillingBots"
 								@click="fillWithBots"
 							>
 								{{ fillingBots ? 'Adding...' : 'Fill with Bots' }}
 							</button>
 							<button
-								class="flex-1 py-2.5 bg-slate-800 hover:bg-red-900/40 border border-slate-700 hover:border-red-800 rounded-lg text-sm text-slate-400 hover:text-red-400 font-medium transition-colors"
+								class="flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors border border-red-500/30 text-red-400/80 hover:bg-red-500/10 hover:text-red-400"
+								style="background: var(--cyber-panel);"
 								@click="abandonHostedGame"
 							>
 								Abandon Game
@@ -1005,13 +1026,14 @@ onUnmounted(stopPolling);
 		<Teleport to="body">
 			<div
 				v-if="joinModalMatchID"
-				class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+				class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
 				@click.self="closeJoinModal"
 			>
 				<div
-					class="bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-xl max-w-sm w-full space-y-4"
+					class="rounded-xl p-6 shadow-xl max-w-sm w-full space-y-4 cyber-panel border-cyan-500/30"
+					style="background: var(--cyber-panel);"
 				>
-					<h3 class="text-lg font-semibold text-white">Pick your color</h3>
+					<h3 class="text-lg font-semibold font-display text-cyan-100">Pick your color</h3>
 					<div class="flex flex-wrap gap-2">
 						<button
 							v-for="c in joinModalAvailableColors"
@@ -1020,8 +1042,8 @@ onUnmounted(stopPolling);
 							class="w-10 h-10 rounded-full border-2 transition-all shrink-0"
 							:class="[
 								joinModalColor === c
-									? 'border-white scale-110 ring-2 ring-white/50'
-									: 'border-slate-600 hover:border-slate-500',
+									? 'border-cyan-400 scale-110 ring-2 ring-cyan-400/50'
+									: 'border-cyan-500/30 hover:border-cyan-500/50',
 								{
 									red: 'bg-red-500',
 									blue: 'bg-blue-500',
@@ -1036,13 +1058,15 @@ onUnmounted(stopPolling);
 					</div>
 					<div class="flex gap-2 pt-2">
 						<button
-							class="flex-1 py-2.5 bg-green-600 hover:bg-green-500 rounded-lg font-medium text-white transition-colors"
+							class="flex-1 py-2.5 rounded-lg font-medium text-cyan-950 transition-colors font-display border border-cyan-400/50"
+							style="background: linear-gradient(180deg, #22d3ee 0%, #0891b2 100%);"
 							@click="joinModalMatchID && joinGame(joinModalMatchID, joinModalColor)"
 						>
 							Join game
 						</button>
 						<button
-							class="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium text-slate-300 transition-colors"
+							class="px-4 py-2.5 rounded-lg font-medium text-cyan-200 transition-colors border border-cyan-500/30 hover:bg-cyan-500/10"
+							style="background: var(--cyber-panel);"
 							@click="closeJoinModal"
 						>
 							Cancel

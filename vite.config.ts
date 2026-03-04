@@ -16,9 +16,9 @@ export default defineConfig({
 			'@engine/client': path.resolve(__dirname, 'noble-bg-engine/packages/engine/src/client/index'),
 		},
 	},
-	// Development server configuration
+	// Development server configuration (default port 5173 if omitted)
 	server: {
-		port: 3000,
+		port: 5173,
 		open: true,
 		host: true, // Allow external connections for network testing
 	},

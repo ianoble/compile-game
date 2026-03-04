@@ -1,0 +1,13 @@
+---
+description: Do not edit files inside noble-bg-engine; treat it as a read-only copy of the engine.
+alwaysApply: true
+---
+
+# Do Not Edit noble-bg-engine
+
+The folder **noble-bg-engine** (at the project root) is a **copy** of the engine from `c:\code\noble-bg-engine`. Treat it like an npm package: **read-only**.
+
+- **Never** edit, add, or delete files under `noble-bg-engine/`.
+- **Never** suggest or apply changes there.
+- Engine changes belong in the real repo (`c:\code\noble-bg-engine`). The maintainer updates the copy in this project (e.g. via copy-to-client script) when needed.
+- If compile-game needs different engine behavior, either change compile-game’s own code to work with the current engine API, or instruct the user to update the engine in the real repo and re-copy.

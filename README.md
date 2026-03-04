@@ -11,6 +11,20 @@ This folder is a **generic app scaffold** for building games with the [@noble/bg
 - **Stub board**: `src/components/GameBoard.vue` — 4×4 grid, "Your gold" and "Take 3 gold" button, plus the same game-over score table and count-up animation as Golden Ages. Replace with your game’s board.
 - **Stub bots**: `useBotPlayers` in composables is a no-op; replace with real bot logic if your game needs AI players.
 
+## Running the backend (Compile game)
+
+The Compile game is **registered on the server** only when the server is built from the **noble-bg-engine** repo (sibling of this project). If you see "Game compile not found" when creating a game:
+
+1. Open a terminal in **noble-bg-engine** (e.g. `c:\code\noble-bg-engine`).
+2. Build and start the server:
+   ```bash
+   npm run build -w packages/server
+   npm run start -w packages/server
+   ```
+   Or from the repo root: `npm run start` (builds then starts).
+3. In the server log you should see `[bgf] loaded external game from game-compile.js` and `registered games: ..., compile, ...`.
+4. Then run this app with `npm run dev` and create a game again.
+
 ## Using this template
 
 ### Option A: Template inside the-golden-ages repo

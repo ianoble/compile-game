@@ -123,11 +123,11 @@ async function joinMatch() {
 </script>
 
 <template>
-	<div class="min-h-screen bg-slate-900 text-white flex items-center justify-center p-6">
+	<div class="min-h-screen text-white flex items-center justify-center p-6" style="background: var(--cyber-bg);">
 		<div class="w-full max-w-sm space-y-6">
-			<h1 class="text-2xl font-bold text-center">Join {{ gameDef.displayName }}</h1>
+			<h1 class="text-2xl font-bold text-center font-display text-cyan-100">Join {{ gameDef.displayName }}</h1>
 			<p class="text-sm text-slate-400 text-center">
-				Match: <code class="text-blue-400">{{ matchID }}</code>
+				Match: <code class="text-cyan-400">{{ matchID }}</code>
 			</p>
 
 			<!-- Auth required -->
@@ -142,7 +142,8 @@ async function joinMatch() {
 							v-model="authName"
 							placeholder="Your display name"
 							maxlength="24"
-							class="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+							class="w-full px-4 py-2.5 rounded-lg text-white placeholder-slate-500 border border-cyan-500/30 focus:border-cyan-400 transition-colors"
+							style="background: var(--cyber-panel);"
 							@keyup.enter="handleAuth"
 						/>
 					</div>
@@ -153,7 +154,8 @@ async function joinMatch() {
 							type="password"
 							placeholder="4-8 characters"
 							maxlength="8"
-							class="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+							class="w-full px-4 py-2.5 rounded-lg text-white placeholder-slate-500 border border-cyan-500/30 focus:border-cyan-400 transition-colors"
+							style="background: var(--cyber-panel);"
 							@keyup.enter="handleAuth"
 						/>
 					</div>
@@ -161,7 +163,8 @@ async function joinMatch() {
 					<p v-if="loginError" class="text-sm text-red-400 text-center">{{ loginError }}</p>
 
 					<button
-						class="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold transition-colors disabled:opacity-50"
+						class="w-full py-3 rounded-lg font-semibold transition-colors disabled:opacity-50 font-display text-cyan-950 border border-cyan-400/50"
+						style="background: linear-gradient(180deg, #22d3ee 0%, #0891b2 100%);"
 						:disabled="authLoading || !authName.trim() || authPin.length < 4"
 						@click="handleAuth"
 					>
@@ -174,7 +177,7 @@ async function joinMatch() {
 						<template v-if="authMode === 'login'">
 							Don't have an account?
 							<button
-								class="text-blue-400 hover:text-blue-300 font-medium"
+								class="text-cyan-400 hover:text-cyan-300 font-medium"
 								@click="
 									authMode = 'register';
 									loginError = '';
@@ -186,7 +189,7 @@ async function joinMatch() {
 						<template v-else>
 							Already have an account?
 							<button
-								class="text-blue-400 hover:text-blue-300 font-medium"
+								class="text-cyan-400 hover:text-cyan-300 font-medium"
 								@click="
 									authMode = 'login';
 									loginError = '';
@@ -220,8 +223,8 @@ async function joinMatch() {
 							class="w-10 h-10 rounded-full border-2 transition-all shrink-0"
 							:class="[
 								selectedColor === c
-									? 'border-white scale-110 ring-2 ring-white/50'
-									: 'border-slate-600 hover:border-slate-500',
+									? 'border-cyan-400 scale-110 ring-2 ring-cyan-400/50'
+									: 'border-cyan-500/30 hover:border-cyan-500/50',
 								{
 									red: 'bg-red-500',
 									blue: 'bg-blue-500',
@@ -237,7 +240,8 @@ async function joinMatch() {
 				</div>
 
 				<button
-					class="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold transition-colors"
+					class="w-full py-3 rounded-lg font-semibold transition-colors font-display text-cyan-950 border border-cyan-400/50"
+					style="background: linear-gradient(180deg, #22d3ee 0%, #0891b2 100%); box-shadow: 0 0 16px rgba(34, 211, 238, 0.4);"
 					@click="joinMatch"
 				>
 					Join Game

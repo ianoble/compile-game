@@ -10,9 +10,9 @@
  * ```
  */
 export interface ResourcePool {
-	amounts: Record<string, number>;
-	/** Optional maximum for each resource. Resources without a limit are unbounded. */
-	limits?: Record<string, number>;
+  amounts: Record<string, number>;
+  /** Optional maximum for each resource. Resources without a limit are unbounded. */
+  limits?: Record<string, number>;
 }
 
 /**
@@ -20,10 +20,10 @@ export interface ResourcePool {
  * `position` is always kept within `[min, max]` by the utility functions.
  */
 export interface Track {
-	position: number;
-	min: number;
-	max: number;
-	label?: string;
+  position: number;
+  min: number;
+  max: number;
+  label?: string;
 }
 
 /**
@@ -31,8 +31,8 @@ export interface Track {
  * When `capacity` is set, utilities prevent adding beyond that limit.
  */
 export interface Slot<T = unknown> {
-	items: T[];
-	/** Maximum number of items. Undefined means unlimited. */
-	capacity?: number;
-	label?: string;
+  items: T[];
+  /** Maximum number of items. Undefined means unlimited. */
+  capacity?: number;
+  label?: string;
 }

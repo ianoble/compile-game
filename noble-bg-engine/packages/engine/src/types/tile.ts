@@ -12,9 +12,9 @@
  * ```
  */
 export interface TileShape {
-	id: string;
-	offsets: [number, number][];
-	label?: string;
+  id: string;
+  offsets: [number, number][];
+  label?: string;
 }
 
 /** Clockwise rotation in degrees. */
@@ -25,15 +25,15 @@ export type TileRotation = 0 | 90 | 180 | 270;
  * `cells` contains the **absolute** board positions computed at placement time.
  */
 export interface PlacedTile {
-	id: string;
-	shapeId: string;
-	owner: string | null;
-	anchorRow: number;
-	anchorCol: number;
-	rotation: TileRotation;
-	/** Absolute `[row, col]` positions this tile occupies on the board. */
-	cells: [number, number][];
-	[key: string]: unknown;
+  id: string;
+  shapeId: string;
+  owner: string | null;
+  anchorRow: number;
+  anchorCol: number;
+  rotation: TileRotation;
+  /** Absolute `[row, col]` positions this tile occupies on the board. */
+  cells: [number, number][];
+  [key: string]: unknown;
 }
 
 /**
@@ -41,7 +41,7 @@ export interface PlacedTile {
  * `occupancy` maps `"row,col"` strings to tile IDs for O(1) lookups.
  */
 export interface TileLayer {
-	placed: Record<string, PlacedTile>;
-	/** Maps `"row,col"` -> tile ID for quick cell-to-tile lookups. */
-	occupancy: Record<string, string>;
+  placed: Record<string, PlacedTile>;
+  /** Maps `"row,col"` -> tile ID for quick cell-to-tile lookups. */
+  occupancy: Record<string, string>;
 }
