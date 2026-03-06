@@ -182,10 +182,30 @@ export interface CompileSetupData {
 	cardTriggerRows?: Record<string, ('top' | 'middle' | 'bottom')[]>;
 	/** Per cardId: which rows have "After you clear cache" (pushed when Check Cache phase discards). */
 	cardAfterClearCacheRows?: Record<string, ('top' | 'middle' | 'bottom')[]>;
+	/** Per cardId: which rows trigger at Start phase. */
+	cardStartRows?: Record<string, ('top' | 'middle' | 'bottom')[]>;
+	/** Per cardId: which rows trigger at End phase. */
+	cardEndRows?: Record<string, ('top' | 'middle' | 'bottom')[]>;
+	/** Per cardId: which rows trigger when this card would be deleted by compiling. */
+	cardWhenDeletedByCompileRows?: Record<string, ('top' | 'middle' | 'bottom')[]>;
+	/** Per cardId: which rows trigger after you draw cards. */
+	cardAfterDrawRows?: Record<string, ('top' | 'middle' | 'bottom')[]>;
+	/** Per cardId: which rows trigger after your opponent discards cards. */
+	cardAfterOpponentDiscardRows?: Record<string, ('top' | 'middle' | 'bottom')[]>;
+	/** Per cardId: which rows trigger when this card would be covered. */
+	cardWhenCoveredRows?: Record<string, ('top' | 'middle' | 'bottom')[]>;
 	/** Card ids with "All face-down in this stack have value 4". */
 	cardIdsWithFaceDownValue4InStack?: string[];
 	/** Card ids with "play face-up without matching protocols". */
 	cardIdsPlayFaceUpWithoutMatching?: string[];
+	/** Card ids with "Your opponent's total value in this line is reduced by 2". */
+	cardIdsOpponentValueReducedInLine?: string[];
+	/** Card ids with "Your opponent cannot play cards face-down in this line". */
+	cardIdsOpponentCannotPlayFaceDownInLine?: string[];
+	/** Card ids with "Your opponent can only play cards face-down". */
+	cardIdsOpponentCanOnlyPlayFaceDown?: string[];
+	/** Card ids with "Your opponent cannot play cards in this line". */
+	cardIdsOpponentCannotPlayInLine?: string[];
 }
 
 function hasStartAbility(card: CommandCard): boolean {
@@ -201,8 +221,12 @@ function rowHasTrigger(row: { emphasis?: string; text?: string } | undefined): b
 	const explicitTrigger =
 		t.includes('when you play') ||
 		t.includes('start') ||
+		t.includes('end') ||
 		t.includes('when this is uncovered') ||
-		t.includes('when played');
+		t.includes('when played') ||
+		(t.includes('when') && t.includes('deleted') && t.includes('compiling')) ||
+		t.includes('after you draw cards') ||
+		t.includes('after your opponent discards');
 	if (explicitTrigger) return true;
 	// "Discard … Draw …" or "Draw … Discard …" (compound effects)
 	if (t.includes('discard') && t.includes('draw')) return true;
@@ -249,6 +273,48 @@ function rowHasAfterClearCacheTrigger(row: { emphasis?: string; text?: string } 
 	return t.includes('after you clear cache');
 }
 
+/** True if this row has "Start" phase trigger (pushed at start of turn). */
+function rowHasStartTrigger(row: { emphasis?: string; text?: string } | undefined): boolean {
+	if (!row) return false;
+	const t = `${row.emphasis ?? ''} ${row.text ?? ''}`.toLowerCase();
+	return t.includes('start');
+}
+
+/** True if this row has "End" phase trigger (pushed at end of turn before endTurn). */
+function rowHasEndTrigger(row: { emphasis?: string; text?: string } | undefined): boolean {
+	if (!row) return false;
+	const t = `${row.emphasis ?? ''} ${row.text ?? ''}`.toLowerCase();
+	return t.includes('end');
+}
+
+/** True if this row has "When this card would be deleted by compiling" trigger. */
+function rowHasWhenDeletedByCompileTrigger(row: { emphasis?: string; text?: string } | undefined): boolean {
+	if (!row) return false;
+	const t = `${row.emphasis ?? ''} ${row.text ?? ''}`.toLowerCase();
+	return t.includes('when') && t.includes('deleted') && t.includes('compiling');
+}
+
+/** True if this row has "After you draw cards" trigger. */
+function rowHasAfterDrawTrigger(row: { emphasis?: string; text?: string } | undefined): boolean {
+	if (!row) return false;
+	const t = `${row.emphasis ?? ''} ${row.text ?? ''}`.toLowerCase();
+	return t.includes('after you draw cards');
+}
+
+/** True if this row has "After your opponent discards cards" trigger. */
+function rowHasAfterOpponentDiscardTrigger(row: { emphasis?: string; text?: string } | undefined): boolean {
+	if (!row) return false;
+	const t = `${row.emphasis ?? ''} ${row.text ?? ''}`.toLowerCase();
+	return t.includes('after your opponent discards');
+}
+
+/** True if this row has "When this card would be covered" trigger. */
+function rowHasWhenCoveredTrigger(row: { emphasis?: string; text?: string } | undefined): boolean {
+	if (!row) return false;
+	const t = `${row.emphasis ?? ''} ${row.text ?? ''}`.toLowerCase();
+	return t.includes('when this card would be covered');
+}
+
 /** Build cardTriggerRows: for each command card, list which rows (top/middle/bottom) have triggers. */
 function buildCardTriggerRows(): Record<string, ('top' | 'middle' | 'bottom')[]> {
 	const out: Record<string, ('top' | 'middle' | 'bottom')[]> = {};
@@ -275,6 +341,84 @@ function buildCardAfterClearCacheRows(): Record<string, ('top' | 'middle' | 'bot
 	return out;
 }
 
+/** Build cardStartRows: rows that trigger at Start phase (pushed when entering Start). */
+function buildCardStartRows(): Record<string, ('top' | 'middle' | 'bottom')[]> {
+	const out: Record<string, ('top' | 'middle' | 'bottom')[]> = {};
+	for (const card of ALL_COMMAND_CARDS) {
+		const rows: ('top' | 'middle' | 'bottom')[] = [];
+		if (rowHasStartTrigger(card.top)) rows.push('top');
+		if (rowHasStartTrigger(card.middle)) rows.push('middle');
+		if (rowHasStartTrigger(card.bottom)) rows.push('bottom');
+		if (rows.length > 0) out[card.id] = rows;
+	}
+	return out;
+}
+
+/** Build cardEndRows: rows that trigger at End phase (pushed when entering End before endTurn). */
+function buildCardEndRows(): Record<string, ('top' | 'middle' | 'bottom')[]> {
+	const out: Record<string, ('top' | 'middle' | 'bottom')[]> = {};
+	for (const card of ALL_COMMAND_CARDS) {
+		const rows: ('top' | 'middle' | 'bottom')[] = [];
+		if (rowHasEndTrigger(card.top)) rows.push('top');
+		if (rowHasEndTrigger(card.middle)) rows.push('middle');
+		if (rowHasEndTrigger(card.bottom)) rows.push('bottom');
+		if (rows.length > 0) out[card.id] = rows;
+	}
+	return out;
+}
+
+/** Build cardWhenDeletedByCompileRows: rows that trigger when the card would be deleted by compiling. */
+function buildCardWhenDeletedByCompileRows(): Record<string, ('top' | 'middle' | 'bottom')[]> {
+	const out: Record<string, ('top' | 'middle' | 'bottom')[]> = {};
+	for (const card of ALL_COMMAND_CARDS) {
+		const rows: ('top' | 'middle' | 'bottom')[] = [];
+		if (rowHasWhenDeletedByCompileTrigger(card.top)) rows.push('top');
+		if (rowHasWhenDeletedByCompileTrigger(card.middle)) rows.push('middle');
+		if (rowHasWhenDeletedByCompileTrigger(card.bottom)) rows.push('bottom');
+		if (rows.length > 0) out[card.id] = rows;
+	}
+	return out;
+}
+
+/** Build cardAfterDrawRows: rows that trigger after you draw cards. */
+function buildCardAfterDrawRows(): Record<string, ('top' | 'middle' | 'bottom')[]> {
+	const out: Record<string, ('top' | 'middle' | 'bottom')[]> = {};
+	for (const card of ALL_COMMAND_CARDS) {
+		const rows: ('top' | 'middle' | 'bottom')[] = [];
+		if (rowHasAfterDrawTrigger(card.top)) rows.push('top');
+		if (rowHasAfterDrawTrigger(card.middle)) rows.push('middle');
+		if (rowHasAfterDrawTrigger(card.bottom)) rows.push('bottom');
+		if (rows.length > 0) out[card.id] = rows;
+	}
+	return out;
+}
+
+/** Build cardAfterOpponentDiscardRows: rows that trigger after your opponent discards cards. */
+function buildCardAfterOpponentDiscardRows(): Record<string, ('top' | 'middle' | 'bottom')[]> {
+	const out: Record<string, ('top' | 'middle' | 'bottom')[]> = {};
+	for (const card of ALL_COMMAND_CARDS) {
+		const rows: ('top' | 'middle' | 'bottom')[] = [];
+		if (rowHasAfterOpponentDiscardTrigger(card.top)) rows.push('top');
+		if (rowHasAfterOpponentDiscardTrigger(card.middle)) rows.push('middle');
+		if (rowHasAfterOpponentDiscardTrigger(card.bottom)) rows.push('bottom');
+		if (rows.length > 0) out[card.id] = rows;
+	}
+	return out;
+}
+
+/** Build cardWhenCoveredRows: rows that trigger when this card would be covered. */
+function buildCardWhenCoveredRows(): Record<string, ('top' | 'middle' | 'bottom')[]> {
+	const out: Record<string, ('top' | 'middle' | 'bottom')[]> = {};
+	for (const card of ALL_COMMAND_CARDS) {
+		const rows: ('top' | 'middle' | 'bottom')[] = [];
+		if (rowHasWhenCoveredTrigger(card.top)) rows.push('top');
+		if (rowHasWhenCoveredTrigger(card.middle)) rows.push('middle');
+		if (rowHasWhenCoveredTrigger(card.bottom)) rows.push('bottom');
+		if (rows.length > 0) out[card.id] = rows;
+	}
+	return out;
+}
+
 function rowHasFaceDownValue4InStack(row: { text?: string } | undefined): boolean {
 	return !!row?.text?.toLowerCase().includes('face-down') && !!row?.text?.toLowerCase().includes('value of 4');
 }
@@ -282,6 +426,26 @@ function rowHasFaceDownValue4InStack(row: { text?: string } | undefined): boolea
 function rowHasPlayFaceUpWithoutMatching(row: { text?: string } | undefined): boolean {
 	const t = (row?.text ?? '').toLowerCase();
 	return t.includes('play') && t.includes('face-up') && t.includes('without matching');
+}
+
+function rowHasOpponentValueReducedInLine(row: { text?: string } | undefined): boolean {
+	const t = (row?.text ?? '').toLowerCase();
+	return t.includes('opponent') && t.includes('total value') && t.includes('reduced');
+}
+
+function rowHasOpponentCannotPlayFaceDownInLine(row: { text?: string } | undefined): boolean {
+	const t = (row?.text ?? '').toLowerCase();
+	return t.includes('opponent') && t.includes('cannot play') && t.includes('face-down') && t.includes('line');
+}
+
+function rowHasOpponentCanOnlyPlayFaceDown(row: { text?: string } | undefined): boolean {
+	const t = (row?.text ?? '').toLowerCase();
+	return t.includes('opponent') && t.includes('can only play') && t.includes('face-down');
+}
+
+function rowHasOpponentCannotPlayInLine(row: { text?: string } | undefined): boolean {
+	const t = (row?.text ?? '').toLowerCase();
+	return t.includes('opponent') && t.includes('cannot play') && t.includes('line') && !t.includes('face-down');
 }
 
 /** Card ids that have "All face-down cards in this stack have a value of 4" (Darkness 2). */
@@ -300,6 +464,46 @@ function buildCardIdsPlayFaceUpWithoutMatching(): string[] {
 	const out: string[] = [];
 	for (const card of ALL_COMMAND_CARDS) {
 		if (rowHasPlayFaceUpWithoutMatching(card.top) || rowHasPlayFaceUpWithoutMatching(card.middle) || rowHasPlayFaceUpWithoutMatching(card.bottom)) {
+			out.push(card.id);
+		}
+	}
+	return out;
+}
+
+function buildCardIdsOpponentValueReducedInLine(): string[] {
+	const out: string[] = [];
+	for (const card of ALL_COMMAND_CARDS) {
+		if (rowHasOpponentValueReducedInLine(card.top) || rowHasOpponentValueReducedInLine(card.middle) || rowHasOpponentValueReducedInLine(card.bottom)) {
+			out.push(card.id);
+		}
+	}
+	return out;
+}
+
+function buildCardIdsOpponentCannotPlayFaceDownInLine(): string[] {
+	const out: string[] = [];
+	for (const card of ALL_COMMAND_CARDS) {
+		if (rowHasOpponentCannotPlayFaceDownInLine(card.top) || rowHasOpponentCannotPlayFaceDownInLine(card.middle) || rowHasOpponentCannotPlayFaceDownInLine(card.bottom)) {
+			out.push(card.id);
+		}
+	}
+	return out;
+}
+
+function buildCardIdsOpponentCanOnlyPlayFaceDown(): string[] {
+	const out: string[] = [];
+	for (const card of ALL_COMMAND_CARDS) {
+		if (rowHasOpponentCanOnlyPlayFaceDown(card.top) || rowHasOpponentCanOnlyPlayFaceDown(card.middle) || rowHasOpponentCanOnlyPlayFaceDown(card.bottom)) {
+			out.push(card.id);
+		}
+	}
+	return out;
+}
+
+function buildCardIdsOpponentCannotPlayInLine(): string[] {
+	const out: string[] = [];
+	for (const card of ALL_COMMAND_CARDS) {
+		if (rowHasOpponentCannotPlayInLine(card.top) || rowHasOpponentCannotPlayInLine(card.middle) || rowHasOpponentCannotPlayInLine(card.bottom)) {
 			out.push(card.id);
 		}
 	}
@@ -325,8 +529,18 @@ export function getCompileSetupData(): CompileSetupData {
 
 	const cardTriggerRows = buildCardTriggerRows();
 	const cardAfterClearCacheRows = buildCardAfterClearCacheRows();
+	const cardStartRows = buildCardStartRows();
+	const cardEndRows = buildCardEndRows();
+	const cardWhenDeletedByCompileRows = buildCardWhenDeletedByCompileRows();
+	const cardAfterDrawRows = buildCardAfterDrawRows();
+	const cardAfterOpponentDiscardRows = buildCardAfterOpponentDiscardRows();
+	const cardWhenCoveredRows = buildCardWhenCoveredRows();
 	const cardIdsWithFaceDownValue4InStack = buildCardIdsWithFaceDownValue4InStack();
 	const cardIdsPlayFaceUpWithoutMatching = buildCardIdsPlayFaceUpWithoutMatching();
+	const cardIdsOpponentValueReducedInLine = buildCardIdsOpponentValueReducedInLine();
+	const cardIdsOpponentCannotPlayFaceDownInLine = buildCardIdsOpponentCannotPlayFaceDownInLine();
+	const cardIdsOpponentCanOnlyPlayFaceDown = buildCardIdsOpponentCanOnlyPlayFaceDown();
+	const cardIdsOpponentCannotPlayInLine = buildCardIdsOpponentCannotPlayInLine();
 	return {
 		protocolPool,
 		cardIdToValue,
@@ -334,8 +548,18 @@ export function getCompileSetupData(): CompileSetupData {
 		cardIdsWithStartAbility,
 		cardTriggerRows,
 		cardAfterClearCacheRows,
+		cardStartRows,
+		cardEndRows,
+		cardWhenDeletedByCompileRows,
+		cardAfterDrawRows,
+		cardAfterOpponentDiscardRows,
+		cardWhenCoveredRows,
 		cardIdsWithFaceDownValue4InStack,
 		cardIdsPlayFaceUpWithoutMatching,
+		cardIdsOpponentValueReducedInLine,
+		cardIdsOpponentCannotPlayFaceDownInLine,
+		cardIdsOpponentCanOnlyPlayFaceDown,
+		cardIdsOpponentCannotPlayInLine,
 	};
 }
 
@@ -410,6 +634,27 @@ export function getEffectForAbility(
 	if (t.includes('discard') && t.includes('if you do') && t.includes('delete')) {
 		return { type: 'discardThenDelete', params: { playerId: ownerId } };
 	}
+	// Plague 2: "Discard 1 or more. Your opponent discards the amount discarded plus 1."
+	if (t.includes('discard') && t.includes('opponent') && t.includes('amount of cards discarded plus')) {
+		const plusMatch = text.match(/plus\s*(\d+)/i);
+		const bonus = plusMatch ? Math.min(parseInt(plusMatch[1], 10), 5) : 1;
+		const otherId = ownerId === '0' ? '1' : '0';
+		return { type: 'discardThenOpponentDiscardsPlusOne', params: { playerId: ownerId, opponentId: otherId, opponentBonus: bonus } };
+	}
+	// Psychic 2: "Your opponent discards 2 cards. Rearrange their protocols."
+	if (t.includes('your opponent discards 2') && t.includes('rearrange their')) {
+		const otherId = ownerId === '0' ? '1' : '0';
+		return { type: 'opponentDiscardThenRearrangeTheirProtocols', params: { opponentId: otherId, discardCount: 2 } };
+	}
+	// Psychic 3: "Your opponent discards 1 card. Shift 1 of their cards."
+	if (t.includes('your opponent discards 1') && t.includes('shift') && t.includes('their')) {
+		const otherId = ownerId === '0' ? '1' : '0';
+		return { type: 'opponentDiscardThenShiftTheirCard', params: { opponentId: otherId } };
+	}
+	// Water 2: "Draw 2 cards. Rearrange your protocols."
+	if (t.includes('draw 2') && t.includes('rearrange your')) {
+		return { type: 'drawThenRearrange', params: { playerId: ownerId, drawCount: 2 } };
+	}
 
 	// "You discard 1 card" / "You discard N cards"
 	if (t.includes('you discard')) {
@@ -430,6 +675,18 @@ export function getEffectForAbility(
 		const m = row.text?.match(/(\d+)\s*card/);
 		const count = m ? Math.min(parseInt(m[1], 10), 10) : 1;
 		return { type: 'draw', params: { playerId: otherId, count } };
+	}
+	// "Draw N cards" (self, no "you") e.g. "Draw 2 cards. Your opponent cannot compile on their next turn."
+	if (
+		t.includes('draw') && /\d+\s*card/.test(t) &&
+		!t.includes('you draw') && !t.includes('your opponent draws') &&
+		!(t.includes('reveal') && t.includes('face-down')) &&
+		!t.includes('draw the top')
+	) {
+		const m = row.text?.match(/draw\s+(\d+)\s*card/i);
+		const count = m ? Math.min(parseInt(m[1], 10), 10) : 1;
+		const opponentCannotCompile = t.includes('cannot compile');
+		return { type: 'draw', params: { playerId: ownerId, count, opponentCannotCompileNextTurn: opponentCannotCompile || undefined } };
 	}
 	// "You draw N cards" (mandatory)
 	if (t.includes('you draw') && !t.includes('you may draw')) {
@@ -504,15 +761,24 @@ export function getEffectForAbility(
 	if (t.includes('play the top card') && t.includes('face-down') && t.includes('another line')) {
 		return { type: 'playTopOfDeckFaceDownAnotherLine', params: {} };
 	}
-	// "Swap the positions of 2 of your protocols" / "Rearrange your protocols"
-	if ((t.includes('swap') && t.includes('protocol')) || (t.includes('rearrange') && t.includes('protocol'))) {
+	// "Swap the positions of 2 of your protocols" / "Rearrange your protocols" (exclude "their" and "draw 2 ... rearrange")
+	if ((t.includes('swap') && t.includes('protocol')) || (t.includes('rearrange') && t.includes('your') && t.includes('protocol'))) {
 		return { type: 'rearrange', params: {} };
+	}
+	// "Rearrange their protocols" (Psychic 2 handled above as compound)
+	if (t.includes('rearrange') && t.includes('their') && t.includes('protocol')) {
+		const otherId = ownerId === '0' ? '1' : '0';
+		return { type: 'rearrangeOpponentProtocols', params: { opponentId: otherId } };
 	}
 	// "Refresh. Draw 1 card." – draw to 5 (refresh), then draw N more
 	if (t.includes('refresh') && t.includes('draw')) {
 		const drawMatch = text.match(/draw\s+(\d+)\s*card/i);
 		const drawCount = drawMatch ? Math.min(parseInt(drawMatch[1], 10), 10) : 1;
 		return { type: 'refreshThenDraw', params: { drawCount } };
+	}
+	// "Either discard 1 card or flip this card." (Spirit 1 bottom)
+	if ((t.includes('either') && t.includes('or')) && t.includes('discard') && t.includes('flip this card')) {
+		return { type: 'eitherDiscardOrFlipThis', params: {} };
 	}
 	return null;
 }

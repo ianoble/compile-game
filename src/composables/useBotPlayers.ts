@@ -355,6 +355,17 @@ export function useBotPlayers(matchIDRef: Ref<string>, _humanPlayerID: Ref<strin
 						moves.applyEffect('skipCheckCache', {});
 						return;
 					}
+					if (effect.type === 'eitherDiscardOrFlipThis') {
+						const hand = state?.G?.players?.[topAbilityEntry.owner]?.hand ?? [];
+						const choice = hand.length > 0 && Math.random() < 0.5 ? 'discard' as const : 'flip' as const;
+						if (choice === 'discard') {
+							const cardId = hand[Math.floor(Math.random() * hand.length)];
+							moves.applyEffect('eitherDiscardOrFlipThis', { choice: 'discard', cardIds: [cardId] });
+						} else {
+							moves.applyEffect('eitherDiscardOrFlipThis', { choice: 'flip' });
+						}
+						return;
+					}
 					if (effect.type === 'rearrange') {
 						const a = Math.floor(Math.random() * 3);
 						let b = Math.floor(Math.random() * 3);

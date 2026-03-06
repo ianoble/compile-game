@@ -85,3 +85,49 @@ Define when you reach them:
 | Bot         | `src/composables/useBotPlayers.ts` | Resolve effect with valid random choices. |
 
 When a keyword is fully done, mark it **Done** in the table above and move to the next.
+
+---
+
+## Gaps (post-audit 2)
+
+These items were identified in the second abilities audit. Implement in priority order as needed.
+
+### 1. Compound / multi-step effects
+
+| Card | Text | Gap |
+|------|------|-----|
+| Plague 2 | Discard 1 or more. Opponent discards amount discarded + 1. | No effect type for discard N then opponent discards N+1. |
+| Psychic 2 | Opponent discards 2. Rearrange **their** protocols. | Only discard applied; rearrange opponent's protocols not implemented. |
+| Psychic 3 | Opponent discards 1. Shift 1 of their cards. | Only discard; shift opponent's card not in same effect. |
+| Water 2 | Draw 2. Rearrange your protocols. | No single compound; could be two resolutions. |
+
+### 2. Scoped delete / return (server does single-target only)
+
+| Card | Text | Gap |
+|------|------|-----|
+| Death 0 | Delete 1 card from each other line. | Need delete one per other column. |
+| Death 2 | Delete all cards in 1 line with values of 1 or 2. | No delete all in column with value filter. |
+| Metal 3 | Draw 1. Delete all in 1 other line with 8+ cards. | No delete all in line with count filter. |
+| Water 3 | Return all cards with value 2 in 1 line. | No return all in column / by value. |
+
+### 3. Multi-step Start/End and when-covered
+
+| Card | Text | Gap |
+|------|------|-----|
+| Death 1 (Start) | You may draw 1. If you do, delete 1 other. Then delete this card. | Multi-step; no single effect type. |
+| Fire 0 (when covered) | First draw 1. Then flip 1 other card. | When-covered pushed; need draw then flip compound. |
+| Life 3 (when covered) | First play top of deck face-down in another line. | Implemented (playTopOfDeckFaceDownAnotherLine). |
+
+### 4. Triggers not implemented
+
+| Trigger | Example | Gap |
+|---------|---------|-----|
+| When this card is covering a card | Life 4 – If this card is covering a card, draw 1. | No push when card becomes covering. |
+| When this card would be covered **or flipped** | Metal 6 – When covered or flipped: First delete this card. | When-covered pushed; when-flipped not. |
+
+### 5. Passives not implemented
+
+| Text | Gap |
+|------|-----|
+| Your total value in this line increased by 1 per face-down card. | Not in column total modifiers. |
+| Ignore all middle commands of cards in this line. | No server support for ignoring middle row. |

@@ -30,10 +30,30 @@ export interface CompileSetupData {
 	cardTriggerRows?: Record<string, ('top' | 'middle' | 'bottom')[]>;
 	/** Per cardId: which ability rows have "After you clear cache" trigger (pushed when Check Cache discards). */
 	cardAfterClearCacheRows?: Record<string, ('top' | 'middle' | 'bottom')[]>;
+	/** Per cardId: which rows trigger at Start phase. */
+	cardStartRows?: Record<string, ('top' | 'middle' | 'bottom')[]>;
+	/** Per cardId: which rows trigger at End phase. */
+	cardEndRows?: Record<string, ('top' | 'middle' | 'bottom')[]>;
+	/** Per cardId: which rows trigger when this card would be deleted by compiling. */
+	cardWhenDeletedByCompileRows?: Record<string, ('top' | 'middle' | 'bottom')[]>;
+	/** Per cardId: which rows trigger after you draw cards. */
+	cardAfterDrawRows?: Record<string, ('top' | 'middle' | 'bottom')[]>;
+	/** Per cardId: which rows trigger after your opponent discards cards. */
+	cardAfterOpponentDiscardRows?: Record<string, ('top' | 'middle' | 'bottom')[]>;
+	/** Per cardId: which rows trigger when this card would be covered. */
+	cardWhenCoveredRows?: Record<string, ('top' | 'middle' | 'bottom')[]>;
 	/** Card ids with "All face-down in this stack have value 4". */
 	cardIdsWithFaceDownValue4InStack?: string[];
 	/** Card ids with "play face-up without matching protocols". */
 	cardIdsPlayFaceUpWithoutMatching?: string[];
+	/** Card ids with "Your opponent's total value in this line is reduced by 2". */
+	cardIdsOpponentValueReducedInLine?: string[];
+	/** Card ids with "Your opponent cannot play cards face-down in this line". */
+	cardIdsOpponentCannotPlayFaceDownInLine?: string[];
+	/** Card ids with "Your opponent can only play cards face-down". */
+	cardIdsOpponentCanOnlyPlayFaceDown?: string[];
+	/** Card ids with "Your opponent cannot play cards in this line". */
+	cardIdsOpponentCannotPlayInLine?: string[];
 }
 
 export interface CommandStackEntry {
@@ -88,12 +108,32 @@ export interface CompileGameState extends BaseGameState {
 	cardTriggerRows?: Record<string, ('top' | 'middle' | 'bottom')[]>;
 	/** Per cardId: which rows have "After you clear cache" (pushed when Check Cache phase discards). */
 	cardAfterClearCacheRows?: Record<string, ('top' | 'middle' | 'bottom')[]>;
+	/** Per cardId: which rows trigger at Start phase. */
+	cardStartRows?: Record<string, ('top' | 'middle' | 'bottom')[]>;
+	/** Per cardId: which rows trigger at End phase. */
+	cardEndRows?: Record<string, ('top' | 'middle' | 'bottom')[]>;
+	/** Per cardId: which rows trigger when this card would be deleted by compiling. */
+	cardWhenDeletedByCompileRows?: Record<string, ('top' | 'middle' | 'bottom')[]>;
+	/** Per cardId: which rows trigger after you draw cards. */
+	cardAfterDrawRows?: Record<string, ('top' | 'middle' | 'bottom')[]>;
+	/** Per cardId: which rows trigger after your opponent discards cards. */
+	cardAfterOpponentDiscardRows?: Record<string, ('top' | 'middle' | 'bottom')[]>;
+	/** Per cardId: which rows trigger when this card would be covered. */
+	cardWhenCoveredRows?: Record<string, ('top' | 'middle' | 'bottom')[]>;
 	/** Current player skips the discard part of Check Cache this turn (Spirit 0 "Skip your check cache phase"). */
 	skipCheckCacheThisTurn?: boolean;
 	/** Command card ids with "All face-down cards in this stack have a value of 4" (Darkness 2). */
 	cardIdsWithFaceDownValue4InStack?: string[];
 	/** Command card ids with "When you play face-up, they may be played without matching protocols" (Spirit 1). */
 	cardIdsPlayFaceUpWithoutMatching?: string[];
+	/** Card ids with "Your opponent's total value in this line is reduced by 2". */
+	cardIdsOpponentValueReducedInLine?: string[];
+	/** Card ids with "Your opponent cannot play cards face-down in this line". */
+	cardIdsOpponentCannotPlayFaceDownInLine?: string[];
+	/** Card ids with "Your opponent can only play cards face-down". */
+	cardIdsOpponentCanOnlyPlayFaceDown?: string[];
+	/** Card ids with "Your opponent cannot play cards in this line". */
+	cardIdsOpponentCannotPlayInLine?: string[];
 	players: Record<string, CompilePlayerState>;
 	columns: ColumnState[];
 	/** Current turn phase (play phase only). Set in onPlayPhaseBegin. */
@@ -114,6 +154,17 @@ export interface CompileGameState extends BaseGameState {
 	revealedHandForPlayer?: { forPlayerId: string; hand: string[] };
 	/** After "Reveal 1 face-down card": one card ID shown to forPlayerId (cleared when turn ends). */
 	revealedCardForDisplay?: { forPlayerId: string; cardId: string };
+	/** True after Start-phase abilities have been pushed this turn (avoid double-push). */
+	startPhaseAbilitiesPushed?: boolean;
+	/** True after End-phase abilities have been pushed this turn (avoid double-push). */
+	endPhaseAbilitiesPushed?: boolean;
+	/** When set, compile was deferred for "when deleted by compiling" abilities; run actual compile when stack empties. */
+	compilePendingColumn?: number;
+	compilePendingPlayerId?: string;
+	/** When set, play was deferred for "when this card would be covered" abilities; apply play when stack empties. */
+	pendingPlay?: { columnIndex: number; handIndex: number; faceUp: boolean; playerId: string };
+	/** Player id who cannot compile on their next turn (e.g. Metal 1 "Your opponent cannot compile on their next turn"). Cleared in End phase. */
+	opponentCannotCompileNextTurn?: string;
 }
 
 /** Move context may include plugin APIs (e.g. events) from boardgame.io. */
@@ -175,11 +226,41 @@ function setup(
 	const cardAfterClearCacheRows = setupData?.cardAfterClearCacheRows
 		? JSON.parse(JSON.stringify(setupData.cardAfterClearCacheRows)) as Record<string, ('top' | 'middle' | 'bottom')[]>
 		: undefined;
+	const cardStartRows = setupData?.cardStartRows
+		? JSON.parse(JSON.stringify(setupData.cardStartRows)) as Record<string, ('top' | 'middle' | 'bottom')[]>
+		: undefined;
+	const cardEndRows = setupData?.cardEndRows
+		? JSON.parse(JSON.stringify(setupData.cardEndRows)) as Record<string, ('top' | 'middle' | 'bottom')[]>
+		: undefined;
+	const cardWhenDeletedByCompileRows = setupData?.cardWhenDeletedByCompileRows
+		? JSON.parse(JSON.stringify(setupData.cardWhenDeletedByCompileRows)) as Record<string, ('top' | 'middle' | 'bottom')[]>
+		: undefined;
+	const cardAfterDrawRows = setupData?.cardAfterDrawRows
+		? JSON.parse(JSON.stringify(setupData.cardAfterDrawRows)) as Record<string, ('top' | 'middle' | 'bottom')[]>
+		: undefined;
+	const cardAfterOpponentDiscardRows = setupData?.cardAfterOpponentDiscardRows
+		? JSON.parse(JSON.stringify(setupData.cardAfterOpponentDiscardRows)) as Record<string, ('top' | 'middle' | 'bottom')[]>
+		: undefined;
+	const cardWhenCoveredRows = setupData?.cardWhenCoveredRows
+		? JSON.parse(JSON.stringify(setupData.cardWhenCoveredRows)) as Record<string, ('top' | 'middle' | 'bottom')[]>
+		: undefined;
 	const cardIdsWithFaceDownValue4InStack = setupData?.cardIdsWithFaceDownValue4InStack?.length
 		? [...setupData.cardIdsWithFaceDownValue4InStack]
 		: undefined;
 	const cardIdsPlayFaceUpWithoutMatching = setupData?.cardIdsPlayFaceUpWithoutMatching?.length
 		? [...setupData.cardIdsPlayFaceUpWithoutMatching]
+		: undefined;
+	const cardIdsOpponentValueReducedInLine = setupData?.cardIdsOpponentValueReducedInLine?.length
+		? [...setupData.cardIdsOpponentValueReducedInLine]
+		: undefined;
+	const cardIdsOpponentCannotPlayFaceDownInLine = setupData?.cardIdsOpponentCannotPlayFaceDownInLine?.length
+		? [...setupData.cardIdsOpponentCannotPlayFaceDownInLine]
+		: undefined;
+	const cardIdsOpponentCanOnlyPlayFaceDown = setupData?.cardIdsOpponentCanOnlyPlayFaceDown?.length
+		? [...setupData.cardIdsOpponentCanOnlyPlayFaceDown]
+		: undefined;
+	const cardIdsOpponentCannotPlayInLine = setupData?.cardIdsOpponentCannotPlayInLine?.length
+		? [...setupData.cardIdsOpponentCannotPlayInLine]
 		: undefined;
 	return {
 		protocolPool,
@@ -188,8 +269,18 @@ function setup(
 		cardIdsWithStartAbility,
 		cardTriggerRows,
 		cardAfterClearCacheRows,
+		cardStartRows,
+		cardEndRows,
+		cardWhenDeletedByCompileRows,
+		cardAfterDrawRows,
+		cardAfterOpponentDiscardRows,
+		cardWhenCoveredRows,
 		cardIdsWithFaceDownValue4InStack,
 		cardIdsPlayFaceUpWithoutMatching,
+		cardIdsOpponentValueReducedInLine,
+		cardIdsOpponentCannotPlayFaceDownInLine,
+		cardIdsOpponentCanOnlyPlayFaceDown,
+		cardIdsOpponentCannotPlayInLine,
 		players: createEmptyPlayers(),
 		columns: createInitialColumns(),
 		abilityResolutionStack: [],
@@ -238,15 +329,28 @@ function columnTotalByPlayer(col: ColumnState, playerId: string): number {
 		.reduce((s, e) => s + e.value, 0);
 }
 
-/** Like columnTotalByPlayer but applies "face-down value 4" modifier when top card has that ability. */
+/** Like columnTotalByPlayer but applies "face-down value 4" and "opponent total reduced by 2" modifiers. */
 function columnTotalByPlayerWithModifiers(G: CompileGameState, colIdx: number, playerId: string): number {
 	const col = G.columns[colIdx];
 	if (!col) return 0;
 	const top = col.commandStack[col.commandStack.length - 1];
 	const use4ForFaceDown = top && (G.cardIdsWithFaceDownValue4InStack ?? []).includes(top.cardId);
-	return col.commandStack
+	let total = col.commandStack
 		.filter(e => e.owner === playerId)
 		.reduce((s, e) => s + (e.faceUp ? e.value : use4ForFaceDown ? 4 : 2), 0);
+	const opponentId = playerId === '0' ? '1' : '0';
+	const reduceSet = new Set(G.cardIdsOpponentValueReducedInLine ?? []);
+	const opponentHasReducer = col.commandStack.some(e => e.owner === opponentId && reduceSet.has(e.cardId));
+	if (opponentHasReducer) total = Math.max(0, total - 2);
+	return total;
+}
+
+/** True if the column has an uncovered card owned by ownerId whose cardId is in the set. */
+function columnHasUncoveredCardInSet(G: CompileGameState, colIdx: number, ownerId: string, cardIdSet: Set<string>): boolean {
+	const col = G.columns[colIdx];
+	if (!col || col.commandStack.length === 0) return false;
+	const top = col.commandStack[col.commandStack.length - 1];
+	return top.owner === ownerId && cardIdSet.has(top.cardId);
 }
 
 /** True if the player has at least one face-up command card with a Start ability on the board. */
@@ -294,6 +398,28 @@ function isUncovered(G: CompileGameState, colIdx: number, stackIdx: number): boo
 function pushAbility(G: CompileGameState, entry: AbilityResolutionEntry): void {
 	if (!G.abilityResolutionStack) G.abilityResolutionStack = [];
 	G.abilityResolutionStack.push(entry);
+}
+
+/** Push abilities for a player's face-up uncovered cards when rowMap[cardId] is set (e.g. cardAfterDrawRows, cardAfterOpponentDiscardRows). */
+function pushAbilitiesForPlayerFaceUpUncovered(
+	G: CompileGameState,
+	playerId: string,
+	rowMap: Record<string, ('top' | 'middle' | 'bottom')[]> | undefined
+): void {
+	if (!rowMap) return;
+	for (let colIdx = 0; colIdx < NUM_COLUMNS; colIdx++) {
+		const col = G.columns[colIdx];
+		if (!col || col.commandStack.length === 0) continue;
+		const topIdx = col.commandStack.length - 1;
+		const top = col.commandStack[topIdx];
+		if (!top || top.owner !== playerId || !top.faceUp) continue;
+		const rows = rowMap[top.cardId];
+		if (rows) {
+			for (const abilityRow of rows) {
+				pushAbility(G, { columnIndex: colIdx, stackIndex: topIdx, cardId: top.cardId, owner: top.owner, abilityRow });
+			}
+		}
+	}
 }
 
 /** Remove all resolution stack entries for the card at (colIdx, stackIdx). */
@@ -378,10 +504,9 @@ function playCardFromDeckFaceDown(
 	return true;
 }
 
-/** Perform compile on one column: discard stack to owners, set protocolCompiled, maybe draw from opponent. */
-function performCompile(G: CompileGameState, colIdx: number, playerId: string): void {
+/** Perform the actual compile (delete cards, flip protocol, draw from opponent). Called after "when deleted by compiling" abilities are resolved, or immediately if none. */
+function performCompileDoDelete(G: CompileGameState, colIdx: number, playerId: string): void {
 	const col = G.columns[colIdx];
-	// Deactivate abilities for all cards in this line before deleting (covered/deleted).
 	for (let stackIdx = 0; stackIdx < col.commandStack.length; stackIdx++) {
 		removeAbilitiesForCard(G, colIdx, stackIdx);
 	}
@@ -405,6 +530,33 @@ function performCompile(G: CompileGameState, colIdx: number, playerId: string): 
 	}
 }
 
+/** Push "when this card would be deleted by compiling" abilities and set pending; or do the compile. Returns true if abilities were pushed (caller should not advance phase). */
+function performCompile(G: CompileGameState, colIdx: number, playerId: string): boolean {
+	const col = G.columns[colIdx];
+	const whenDeletedRows = G.cardWhenDeletedByCompileRows;
+	if (whenDeletedRows) {
+		let pushed = false;
+		// Push from top of stack first so top card resolves first (LIFO: push in reverse order)
+		for (let stackIdx = col.commandStack.length - 1; stackIdx >= 0; stackIdx--) {
+			const entry = col.commandStack[stackIdx];
+			const rows = whenDeletedRows[entry.cardId];
+			if (rows) {
+				for (const abilityRow of rows) {
+					pushAbility(G, { columnIndex: colIdx, stackIndex: stackIdx, cardId: entry.cardId, owner: entry.owner, abilityRow });
+					pushed = true;
+				}
+			}
+		}
+		if (pushed) {
+			G.compilePendingColumn = colIdx;
+			G.compilePendingPlayerId = playerId;
+			return true;
+		}
+	}
+	performCompileDoDelete(G, colIdx, playerId);
+	return false;
+}
+
 /** Play phase, Action only: play one command card. Face down = value 2, no powers, any lane. */
 function playCommandCard(
 	{ G, ctx, events }: MoveContext,
@@ -415,10 +567,25 @@ function playCommandCard(
 	if (ctx.phase !== 'play') return INVALID_MOVE;
 	const phase = G.turnPhase ?? 'Start';
 	if (phase !== 'Action') return INVALID_MOVE;
+	if (G.pendingPlay && G.pendingPlay.playerId === ctx.currentPlayer) return INVALID_MOVE; // complete deferred play first
 	if (columnIndex < 0 || columnIndex >= NUM_COLUMNS) return INVALID_MOVE;
 	const playerId = ctx.currentPlayer;
+	const opponentId = playerId === '0' ? '1' : '0';
 	const player = G.players[playerId];
 	if (!player) return INVALID_MOVE;
+	// Opponent play restrictions (cards on opponent's side that restrict current player)
+	if (G.cardIdsOpponentCannotPlayInLine?.length) {
+		const set = new Set(G.cardIdsOpponentCannotPlayInLine);
+		if (columnHasUncoveredCardInSet(G, columnIndex, opponentId, set)) return INVALID_MOVE;
+	}
+	if (!faceUp && G.cardIdsOpponentCannotPlayFaceDownInLine?.length) {
+		const set = new Set(G.cardIdsOpponentCannotPlayFaceDownInLine);
+		if (columnHasUncoveredCardInSet(G, columnIndex, opponentId, set)) return INVALID_MOVE;
+	}
+	if (faceUp && G.cardIdsOpponentCanOnlyPlayFaceDown?.length) {
+		const set = new Set(G.cardIdsOpponentCanOnlyPlayFaceDown);
+		if (columnHasUncoveredCardInSet(G, columnIndex, opponentId, set)) return INVALID_MOVE;
+	}
 	const hand = player.hand;
 	if (handIndex < 0 || handIndex >= hand.length) return INVALID_MOVE;
 
@@ -432,10 +599,41 @@ function playCommandCard(
 			return INVALID_MOVE;
 		}
 	}
+	const col = G.columns[columnIndex];
+	const oldTopStackIdx = col.commandStack.length - 1;
+	// If the card that would be covered has "when this card would be covered" abilities, push them and defer the play.
+	if (oldTopStackIdx >= 0 && G.cardWhenCoveredRows) {
+		const top = col.commandStack[oldTopStackIdx];
+		const whenCoveredRows = G.cardWhenCoveredRows[top.cardId];
+		if (whenCoveredRows && whenCoveredRows.length > 0) {
+			for (const abilityRow of whenCoveredRows) {
+				pushAbility(G, { columnIndex, stackIndex: oldTopStackIdx, cardId: top.cardId, owner: top.owner, abilityRow });
+			}
+			G.pendingPlay = { columnIndex, handIndex, faceUp, playerId };
+			return;
+		}
+	}
+	applyPlayToColumn(G, ctx, events, columnIndex, handIndex, faceUp, playerId);
+}
+
+/** Actually add the card to the column (from hand), push triggers, check compile. Used by playCommandCard and when applying pendingPlay. */
+function applyPlayToColumn(
+	G: CompileGameState,
+	ctx: Ctx,
+	events: { endTurn?: () => void } | undefined,
+	columnIndex: number,
+	handIndex: number,
+	faceUp: boolean,
+	playerId: string
+): void {
+	const player = G.players[playerId];
+	if (!player) return;
+	const hand = player.hand;
+	if (handIndex < 0 || handIndex >= hand.length) return;
+	const cardId = hand[handIndex];
 	const value = faceUp ? (G.cardIdToValue[cardId] ?? 0) : 2;
 	player.hand.splice(handIndex, 1);
 	const col = G.columns[columnIndex];
-	// Deactivate abilities for the card that is about to become covered (current top).
 	const oldTopStackIdx = col.commandStack.length - 1;
 	if (oldTopStackIdx >= 0) {
 		removeAbilitiesForCard(G, columnIndex, oldTopStackIdx);
@@ -447,25 +645,27 @@ function playCommandCard(
 		value,
 	});
 	const newStackIdx = col.commandStack.length - 1;
-	// Push triggered ability rows for the new card (only if face-up and has trigger metadata).
 	if (faceUp && G.cardTriggerRows?.[cardId]?.length) {
 		for (const abilityRow of G.cardTriggerRows[cardId]) {
 			pushAbility(G, { columnIndex, stackIndex: newStackIdx, cardId, owner: playerId, abilityRow });
 		}
 	}
-
 	if (columnSumWithModifiers(G, columnIndex) >= COMPILE_THRESHOLD) {
-		performCompile(G, columnIndex, playerId);
-		G.compiledThisTurn = true;
+		const deferred = performCompile(G, columnIndex, playerId);
+		if (!deferred) G.compiledThisTurn = true;
 	}
-
 	const stackLen = (G.abilityResolutionStack ?? []).length;
 	if (stackLen === 0) {
+		if (G.compilePendingColumn != null && G.compilePendingPlayerId != null) {
+			performCompileDoDelete(G, G.compilePendingColumn, G.compilePendingPlayerId);
+			G.compiledThisTurn = true;
+			delete G.compilePendingColumn;
+			delete G.compilePendingPlayerId;
+		}
 		G.turnPhase = 'CheckCache';
-		runOnePhaseStep(G, ctx, events); // CheckCache → End
-		runOnePhaseStep(G, ctx, events); // End → endTurn
+		runOnePhaseStep(G, ctx, events);
+		runOnePhaseStep(G, ctx, events);
 	}
-	// If stack non-empty, leave turnPhase as Action so player must resolve abilities before turn ends.
 }
 
 /** Play phase: draw back up to HAND_SIZE (Refresh). Uses drawFromDeck so only drawing triggers reshuffle. */
@@ -506,16 +706,19 @@ export type EffectType =
 	| 'draw' | 'discard' | 'delete' | 'return' | 'shift' | 'shiftAllInLine' | 'flip' | 'flipMultiple' | 'reveal'
 	| 'drawThenDiscardThenReveal' | 'revealFaceDownThenOptional'
 	| 'discardThenDraw' | 'drawThenDiscard' | 'discardThenReturn' | 'discardThenDelete'
+	| 'discardThenOpponentDiscardsPlusOne' | 'opponentDiscardThenRearrangeTheirProtocols' | 'opponentDiscardThenShiftTheirCard'
+	| 'drawThenRearrange' | 'rearrangeOpponentProtocols'
 	| 'playFromHandFaceDownAnotherLine' | 'playTopOfDeckFaceDownUnderThisCard' | 'opponentPlayTopOfDeckFaceDownInLine'
 	| 'playTopOfDeckFaceDownInEachLineWhereYouHaveCard' | 'playTopOfDeckFaceDownAnotherLine' | 'playOneCard'
 	| 'playTopOfDeckFaceDownInEachOtherLine'
 	| 'refreshThenDraw'
 	| 'rearrange'
-	| 'skipCheckCache';
+	| 'skipCheckCache'
+	| 'eitherDiscardOrFlipThis';
 
 /** Params for applyEffect (shape depends on effect type). */
 export type EffectParams =
-	| { type: 'draw'; playerId: string; count: number; optional?: boolean }
+	| { type: 'draw'; playerId: string; count: number; optional?: boolean; opponentCannotCompileNextTurn?: boolean }
 	| { type: 'discard'; playerId: string; count?: number; downTo?: number; cardIds?: string[] }
 	| { type: 'discardThenDraw'; playerId: string; cardIds: string[]; drawBonus: number }
 	| { type: 'drawThenDiscard'; drawPlayerId: string; drawCount: number; discardPlayerId: string; discardCount: number }
@@ -526,22 +729,32 @@ export type EffectParams =
 	| { type: 'shift'; fromColumnIndex: number; fromStackIndex: number; toColumnIndex: number }
 	| { type: 'shiftAllInLine'; fromColumnIndex: number; toColumnIndex: number }
 	| { type: 'flip'; columnIndex: number; stackIndex: number }
-	| { type: 'flipMultiple'; targets: Array<{ columnIndex: number; stackIndex: number }> };
+	| { type: 'flipMultiple'; targets: Array<{ columnIndex: number; stackIndex: number }> }
+	| { type: 'discardThenOpponentDiscardsPlusOne'; playerId: string; cardIds: string[] }
+	| { type: 'opponentDiscardThenRearrangeTheirProtocols'; opponentId: string; permutation: [number, number, number] }
+	| { type: 'opponentDiscardThenShiftTheirCard'; opponentId: string; fromColumnIndex: number; fromStackIndex: number; toColumnIndex: number }
+	| { type: 'drawThenRearrange'; playerId: string; drawCount: number; permutation: [number, number, number] }
+	| { type: 'rearrangeOpponentProtocols'; opponentId: string; permutation: [number, number, number] };
 
 /** Apply one effect from the resolution stack (LIFO). Pops the top entry after applying. Client sends effect type + params; server validates and runs. */
 function applyEffect({ G, ctx, events }: MoveContext, effectType: EffectType, params: unknown): typeof INVALID_MOVE | void {
 	if (ctx.phase !== 'play') return INVALID_MOVE;
 	const stack = G.abilityResolutionStack ?? [];
 	if (stack.length === 0) return INVALID_MOVE;
+	const topEntry = stack[stack.length - 1];
 
 	switch (effectType) {
 		case 'draw': {
-			const p = params as { playerId: string; count: number; optional?: boolean };
+			const p = params as { playerId: string; count: number; optional?: boolean; opponentCannotCompileNextTurn?: boolean };
 			if (typeof p?.playerId !== 'string' || typeof p?.count !== 'number' || p.count < 0) return INVALID_MOVE;
 			if (p.optional === true && p.count === 0) {
 				// Skip optional draw: no-op, pop will happen below
 			} else if (p.count >= 1) {
 				drawFromDeck(G, p.playerId, p.count);
+				if (p.opponentCannotCompileNextTurn) {
+					G.opponentCannotCompileNextTurn = p.playerId === '0' ? '1' : '0';
+				}
+				pushAbilitiesForPlayerFaceUpUncovered(G, p.playerId, G.cardAfterDrawRows);
 			} else return INVALID_MOVE;
 			break;
 		}
@@ -578,6 +791,10 @@ function applyEffect({ G, ctx, events }: MoveContext, effectType: EffectType, pa
 					pl.discard.push(pl.hand.pop()!);
 				}
 			}
+			const effectOwnerOpponent = topEntry.owner === '0' ? '1' : '0';
+			if (p.playerId === effectOwnerOpponent) {
+				pushAbilitiesForPlayerFaceUpUncovered(G, topEntry.owner, G.cardAfterOpponentDiscardRows);
+			}
 			break;
 		}
 		case 'discardThenDraw': {
@@ -601,6 +818,7 @@ function applyEffect({ G, ctx, events }: MoveContext, effectType: EffectType, pa
 			}
 			const toDraw = p.cardIds.length + Math.max(0, p.drawBonus);
 			drawFromDeck(G, p.playerId, Math.min(toDraw, 20));
+			pushAbilitiesForPlayerFaceUpUncovered(G, p.playerId, G.cardAfterDrawRows);
 			break;
 		}
 		case 'drawThenDiscard': {
@@ -613,6 +831,10 @@ function applyEffect({ G, ctx, events }: MoveContext, effectType: EffectType, pa
 				const toDiscard = Math.min(p.discardCount, discardPl.hand.length);
 				for (let i = 0; i < toDiscard && discardPl.hand.length > 0; i++) {
 					discardPl.discard.push(discardPl.hand.pop()!);
+				}
+				const effectOwnerOpponent = topEntry.owner === '0' ? '1' : '0';
+				if (p.discardPlayerId === effectOwnerOpponent) {
+					pushAbilitiesForPlayerFaceUpUncovered(G, topEntry.owner, G.cardAfterOpponentDiscardRows);
 				}
 			}
 			break;
@@ -812,6 +1034,10 @@ function applyEffect({ G, ctx, events }: MoveContext, effectType: EffectType, pa
 					discardPl.discard.push(discardPl.hand.pop()!);
 				}
 				G.revealedHandForPlayer = { forPlayerId: ctx.currentPlayer, hand: [...discardPl.hand] };
+				const effectOwnerOpponent = topEntry.owner === '0' ? '1' : '0';
+				if (p.discardPlayerId === effectOwnerOpponent) {
+					pushAbilitiesForPlayerFaceUpUncovered(G, topEntry.owner, G.cardAfterOpponentDiscardRows);
+				}
 			}
 			break;
 		}
@@ -969,8 +1195,8 @@ function applyEffect({ G, ctx, events }: MoveContext, effectType: EffectType, pa
 				}
 			}
 			if (columnSumWithModifiers(G, p.columnIndex) >= COMPILE_THRESHOLD) {
-				performCompile(G, p.columnIndex, playerId);
-				G.compiledThisTurn = true;
+				const deferred = performCompile(G, p.columnIndex, playerId);
+				if (!deferred) G.compiledThisTurn = true;
 			}
 			break;
 		}
@@ -998,6 +1224,7 @@ function applyEffect({ G, ctx, events }: MoveContext, effectType: EffectType, pa
 			const toRefresh = Math.max(0, HAND_SIZE - player.hand.length);
 			drawFromDeck(G, playerId, toRefresh);
 			drawFromDeck(G, playerId, drawCount);
+			pushAbilitiesForPlayerFaceUpUncovered(G, playerId, G.cardAfterDrawRows);
 			break;
 		}
 		case 'rearrange': {
@@ -1007,7 +1234,150 @@ function applyEffect({ G, ctx, events }: MoveContext, effectType: EffectType, pa
 			const sorted = [...perm].sort((a, b) => a - b);
 			if (sorted[0] !== 0 || sorted[1] !== 1 || sorted[2] !== 2) return INVALID_MOVE;
 			if (perm[0] === 0 && perm[1] === 1 && perm[2] === 2) return INVALID_MOVE;
-			applyProtocolPermutation(G, perm as [number, number, number]);
+			applyProtocolPermutationForPlayer(G, ctx.currentPlayer, perm as [number, number, number]);
+			break;
+		}
+		case 'discardThenOpponentDiscardsPlusOne': {
+			const p = params as { playerId: string; cardIds: string[] };
+			if (typeof p?.playerId !== 'string' || !Array.isArray(p.cardIds)) return INVALID_MOVE;
+			if (p.cardIds.length < 1) return INVALID_MOVE;
+			const you = G.players[p.playerId];
+			const oppId = p.playerId === '0' ? '1' : '0';
+			const opp = G.players[oppId];
+			if (!you || !opp) return INVALID_MOVE;
+			const handSetYou = new Set(you.hand);
+			const seenYou = new Set<string>();
+			for (const id of p.cardIds) {
+				if (!handSetYou.has(id) || seenYou.has(id)) return INVALID_MOVE;
+				seenYou.add(id);
+			}
+			for (const id of p.cardIds) {
+				const idx = you.hand.indexOf(id);
+				if (idx !== -1) {
+					you.hand.splice(idx, 1);
+					you.discard.push(id);
+				}
+			}
+			const oppCount = p.cardIds.length + 1;
+			const toDiscardOpp = Math.min(oppCount, opp.hand.length);
+			for (let i = 0; i < toDiscardOpp && opp.hand.length > 0; i++) {
+				opp.discard.push(opp.hand.pop()!);
+			}
+			pushAbilitiesForPlayerFaceUpUncovered(G, topEntry.owner, G.cardAfterOpponentDiscardRows);
+			break;
+		}
+		case 'opponentDiscardThenRearrangeTheirProtocols': {
+			const p = params as { opponentId: string; permutation: [number, number, number] };
+			if (typeof p?.opponentId !== 'string' || !Array.isArray(p?.permutation)) return INVALID_MOVE;
+			const perm = p.permutation;
+			if (perm.length !== NUM_COLUMNS) return INVALID_MOVE;
+			const sorted = [...perm].sort((a, b) => a - b);
+			if (sorted[0] !== 0 || sorted[1] !== 1 || sorted[2] !== 2) return INVALID_MOVE;
+			if (perm[0] === 0 && perm[1] === 1 && perm[2] === 2) return INVALID_MOVE;
+			const opp = G.players[p.opponentId];
+			if (!opp) return INVALID_MOVE;
+			const toDiscard = Math.min(2, opp.hand.length);
+			for (let i = 0; i < toDiscard && opp.hand.length > 0; i++) {
+				opp.discard.push(opp.hand.pop()!);
+			}
+			pushAbilitiesForPlayerFaceUpUncovered(G, topEntry.owner, G.cardAfterOpponentDiscardRows);
+			applyProtocolPermutationForPlayer(G, p.opponentId, perm);
+			break;
+		}
+		case 'opponentDiscardThenShiftTheirCard': {
+			const p = params as { opponentId: string; fromColumnIndex: number; fromStackIndex: number; toColumnIndex: number };
+			if (typeof p?.opponentId !== 'string') return INVALID_MOVE;
+			if (typeof p?.fromColumnIndex !== 'number' || typeof p?.fromStackIndex !== 'number' || typeof p?.toColumnIndex !== 'number') return INVALID_MOVE;
+			const opp = G.players[p.opponentId];
+			if (!opp) return INVALID_MOVE;
+			if (opp.hand.length > 0) {
+				opp.discard.push(opp.hand.pop()!);
+			}
+			pushAbilitiesForPlayerFaceUpUncovered(G, topEntry.owner, G.cardAfterOpponentDiscardRows);
+			if (p.toColumnIndex < 0 || p.toColumnIndex >= NUM_COLUMNS || p.fromColumnIndex === p.toColumnIndex) return INVALID_MOVE;
+			const fromCol = G.columns[p.fromColumnIndex];
+			const toCol = G.columns[p.toColumnIndex];
+			if (!fromCol || !toCol || p.fromStackIndex < 0 || p.fromStackIndex >= fromCol.commandStack.length) return INVALID_MOVE;
+			const entry = fromCol.commandStack[p.fromStackIndex];
+			if (!entry || entry.owner !== p.opponentId) return INVALID_MOVE;
+			const [moved] = fromCol.commandStack.splice(p.fromStackIndex, 1);
+			if (!moved) return INVALID_MOVE;
+			toCol.commandStack.push(moved);
+			const newStackIdx = toCol.commandStack.length - 1;
+			if (G.cardTriggerRows?.[moved.cardId]?.length) {
+				for (const abilityRow of G.cardTriggerRows[moved.cardId]) {
+					pushAbility(G, { columnIndex: p.toColumnIndex, stackIndex: newStackIdx, cardId: moved.cardId, owner: moved.owner, abilityRow });
+				}
+			}
+			if (G.abilityResolutionStack) {
+				G.abilityResolutionStack = G.abilityResolutionStack.map((e) => {
+					if (e.columnIndex === p.fromColumnIndex && e.stackIndex === p.fromStackIndex)
+						return { ...e, columnIndex: p.toColumnIndex, stackIndex: newStackIdx };
+					if (e.columnIndex === p.fromColumnIndex && e.stackIndex > p.fromStackIndex) return { ...e, stackIndex: e.stackIndex - 1 };
+					if (e.columnIndex === p.toColumnIndex && e.stackIndex >= newStackIdx) return { ...e, stackIndex: e.stackIndex + 1 };
+					return e;
+				});
+			}
+			break;
+		}
+		case 'drawThenRearrange': {
+			const p = params as { playerId: string; drawCount: number; permutation: [number, number, number] };
+			if (typeof p?.playerId !== 'string' || typeof p?.drawCount !== 'number' || !Array.isArray(p?.permutation)) return INVALID_MOVE;
+			const perm = p.permutation;
+			if (perm.length !== NUM_COLUMNS) return INVALID_MOVE;
+			const sorted = [...perm].sort((a, b) => a - b);
+			if (sorted[0] !== 0 || sorted[1] !== 1 || sorted[2] !== 2) return INVALID_MOVE;
+			if (perm[0] === 0 && perm[1] === 1 && perm[2] === 2) return INVALID_MOVE;
+			drawFromDeck(G, p.playerId, Math.min(p.drawCount, 10));
+			pushAbilitiesForPlayerFaceUpUncovered(G, p.playerId, G.cardAfterDrawRows);
+			applyProtocolPermutationForPlayer(G, p.playerId, perm);
+			break;
+		}
+		case 'rearrangeOpponentProtocols': {
+			const p = params as { opponentId: string; permutation: [number, number, number] };
+			if (typeof p?.opponentId !== 'string' || !Array.isArray(p?.permutation)) return INVALID_MOVE;
+			const perm = p.permutation;
+			if (perm.length !== NUM_COLUMNS) return INVALID_MOVE;
+			const sorted = [...perm].sort((a, b) => a - b);
+			if (sorted[0] !== 0 || sorted[1] !== 1 || sorted[2] !== 2) return INVALID_MOVE;
+			if (perm[0] === 0 && perm[1] === 1 && perm[2] === 2) return INVALID_MOVE;
+			applyProtocolPermutationForPlayer(G, p.opponentId, perm);
+			break;
+		}
+		case 'eitherDiscardOrFlipThis': {
+			const p = params as { choice: 'discard' | 'flip'; cardIds?: string[] };
+			if (p?.choice !== 'discard' && p?.choice !== 'flip') return INVALID_MOVE;
+			const entry = topEntry;
+			if (p.choice === 'discard') {
+				const pl = G.players[entry.owner];
+				if (!pl) return INVALID_MOVE;
+				const cardIds = Array.isArray(p.cardIds) ? p.cardIds : [];
+				if (cardIds.length !== 1) return INVALID_MOVE;
+				const handSet = new Set(pl.hand);
+				for (const id of cardIds) {
+					if (!handSet.has(id)) return INVALID_MOVE;
+					const idx = pl.hand.indexOf(id);
+					pl.hand.splice(idx, 1);
+					pl.discard.push(id);
+				}
+			} else {
+				const col = G.columns[entry.columnIndex];
+				if (!col || entry.stackIndex < 0 || entry.stackIndex >= col.commandStack.length) return INVALID_MOVE;
+				const card = col.commandStack[entry.stackIndex];
+				if (!card) return INVALID_MOVE;
+				card.faceUp = !card.faceUp;
+				if (card.faceUp) {
+					card.value = G.cardIdToValue[card.cardId] ?? 0;
+					if (G.cardTriggerRows?.[card.cardId]?.length) {
+						for (const abilityRow of G.cardTriggerRows[card.cardId]) {
+							pushAbility(G, { columnIndex: entry.columnIndex, stackIndex: entry.stackIndex, cardId: card.cardId, owner: card.owner, abilityRow });
+						}
+					}
+				} else {
+					card.value = 2;
+					removeAbilitiesForCard(G, entry.columnIndex, entry.stackIndex);
+				}
+			}
 			break;
 		}
 		default:
@@ -1017,15 +1387,44 @@ function applyEffect({ G, ctx, events }: MoveContext, effectType: EffectType, pa
 	// Pop the resolved entry
 	G.abilityResolutionStack = stack.slice(0, -1);
 
-	// When stack becomes empty, finish the turn (CheckCache → End → endTurn).
+	// When stack becomes empty, finish the turn (CheckCache → End → endTurn). Apply any deferred compile or play first.
 	if (G.abilityResolutionStack.length === 0 && events) {
+		if (G.compilePendingColumn != null && G.compilePendingPlayerId != null) {
+			performCompileDoDelete(G, G.compilePendingColumn, G.compilePendingPlayerId);
+			G.compiledThisTurn = true;
+			delete G.compilePendingColumn;
+			delete G.compilePendingPlayerId;
+		}
+		if (G.pendingPlay) {
+			const pp = G.pendingPlay;
+			delete G.pendingPlay;
+			applyPlayToColumn(G, ctx, events, pp.columnIndex, pp.handIndex, pp.faceUp, pp.playerId);
+			return;
+		}
 		G.turnPhase = 'CheckCache';
 		runOnePhaseStep(G, ctx, events);
 		runOnePhaseStep(G, ctx, events);
 	}
 }
 
-/** Apply a protocol permutation to G.columns (protocol + protocolCompiled only; commandStack unchanged). */
+/** Apply a protocol permutation to one player's protocol row only. */
+function applyProtocolPermutationForPlayer(G: CompileGameState, playerId: string, permutation: [number, number, number]): void {
+	const playerIdx = playerId === '0' ? 0 : 1;
+	const columns = G.columns;
+	const newProtocol: (string | null)[] = [];
+	const newCompiled: boolean[] = [];
+	for (let col = 0; col < NUM_COLUMNS; col++) {
+		const src = permutation[col];
+		newProtocol[col] = columns[src].protocol[playerIdx];
+		newCompiled[col] = columns[src].protocolCompiled[playerIdx];
+	}
+	for (let col = 0; col < NUM_COLUMNS; col++) {
+		columns[col].protocol[playerIdx] = newProtocol[col];
+		columns[col].protocolCompiled[playerIdx] = newCompiled[col];
+	}
+}
+
+/** Apply a protocol permutation to G.columns (protocol + protocolCompiled only; commandStack unchanged). Both players' rows move together. */
 function applyProtocolPermutation(G: CompileGameState, permutation: [number, number, number]): void {
 	const columns = G.columns;
 	const newProtocol: [string | null, string | null][] = [];
@@ -1083,12 +1482,28 @@ function runOnePhaseStep(
 	const player = G.players[playerId];
 
 	switch (phase) {
-		case 'Start':
-			if (!hasFaceUpCardWithStartAbility(G, playerId)) {
-				// Skip Start phase (no-op; hook for future effects)
+		case 'Start': {
+			if (!G.startPhaseAbilitiesPushed && G.cardStartRows) {
+				for (let colIdx = 0; colIdx < NUM_COLUMNS; colIdx++) {
+					const col = G.columns[colIdx];
+					if (!col || col.commandStack.length === 0) continue;
+					const topIdx = col.commandStack.length - 1;
+					const top = col.commandStack[topIdx];
+					if (!top || top.owner !== playerId || !top.faceUp) continue;
+					const rows = G.cardStartRows[top.cardId];
+					if (rows) {
+						for (const abilityRow of rows) {
+							pushAbility(G, { columnIndex: colIdx, stackIndex: topIdx, cardId: top.cardId, owner: top.owner, abilityRow });
+						}
+					}
+				}
+				G.startPhaseAbilitiesPushed = true;
 			}
+			if ((G.abilityResolutionStack?.length ?? 0) > 0) break;
 			G.turnPhase = 'CheckControl';
+			delete G.startPhaseAbilitiesPushed;
 			break;
+		}
 		case 'CheckControl': {
 			let wins = 0;
 			for (let c = 0; c < NUM_COLUMNS; c++) {
@@ -1101,10 +1516,24 @@ function runOnePhaseStep(
 			break;
 		}
 		case 'CheckCompile': {
+			if (G.compilePendingColumn != null && G.compilePendingPlayerId != null) {
+				performCompileDoDelete(G, G.compilePendingColumn, G.compilePendingPlayerId);
+				delete G.compilePendingColumn;
+				delete G.compilePendingPlayerId;
+				G.compiledThisTurn = true;
+				G.turnPhase = 'CheckCache';
+				break;
+			}
+			if (G.opponentCannotCompileNextTurn === playerId) {
+				// This player cannot compile this turn (e.g. Metal 1 effect)
+				G.turnPhase = 'Action';
+				break;
+			}
 			let compiled = false;
 			for (let c = 0; c < NUM_COLUMNS; c++) {
 				if (columnSumWithModifiers(G, c) >= COMPILE_THRESHOLD) {
-					performCompile(G, c, playerId);
+					const deferred = performCompile(G, c, playerId);
+					if (deferred) break; // abilities pushed; stay in CheckCompile until resolved
 					compiled = true;
 					break;
 				}
@@ -1142,15 +1571,64 @@ function runOnePhaseStep(
 			if ((G.abilityResolutionStack?.length ?? 0) > 0) {
 				break;
 			}
+			// Push End-phase abilities before transitioning to End
+			if (G.cardEndRows) {
+				for (let colIdx = 0; colIdx < NUM_COLUMNS; colIdx++) {
+					const col = G.columns[colIdx];
+					if (!col || col.commandStack.length === 0) continue;
+					const topIdx = col.commandStack.length - 1;
+					const top = col.commandStack[topIdx];
+					if (!top || top.owner !== playerId || !top.faceUp) continue;
+					const rows = G.cardEndRows[top.cardId];
+					if (rows) {
+						for (const abilityRow of rows) {
+							pushAbility(G, { columnIndex: colIdx, stackIndex: topIdx, cardId: top.cardId, owner: top.owner, abilityRow });
+						}
+					}
+				}
+			}
 			G.turnPhase = 'End';
-			break;
-		}
-		case 'End': {
+			G.endPhaseAbilitiesPushed = true;
+			if ((G.abilityResolutionStack?.length ?? 0) > 0) break;
+			// No End abilities to resolve; clear and endTurn now
 			G.turnPhase = 'Start';
 			G.compiledThisTurn = false;
 			delete G.revealedHandForPlayer;
 			delete G.revealedCardForDisplay;
 			delete G.skipCheckCacheThisTurn;
+			delete G.startPhaseAbilitiesPushed;
+			delete G.endPhaseAbilitiesPushed;
+			delete G.opponentCannotCompileNextTurn;
+			const endTurnNow = events?.endTurn ?? (ctx as Ctx & { events?: { endTurn?: () => void } }).events?.endTurn;
+			if (endTurnNow) endTurnNow();
+			break;
+		}
+		case 'End': {
+			if (!G.endPhaseAbilitiesPushed && G.cardEndRows) {
+				for (let colIdx = 0; colIdx < NUM_COLUMNS; colIdx++) {
+					const col = G.columns[colIdx];
+					if (!col || col.commandStack.length === 0) continue;
+					const topIdx = col.commandStack.length - 1;
+					const top = col.commandStack[topIdx];
+					if (!top || top.owner !== playerId || !top.faceUp) continue;
+					const rows = G.cardEndRows[top.cardId];
+					if (rows) {
+						for (const abilityRow of rows) {
+							pushAbility(G, { columnIndex: colIdx, stackIndex: topIdx, cardId: top.cardId, owner: top.owner, abilityRow });
+						}
+					}
+				}
+				G.endPhaseAbilitiesPushed = true;
+			}
+			if ((G.abilityResolutionStack?.length ?? 0) > 0) break;
+			G.turnPhase = 'Start';
+			G.compiledThisTurn = false;
+			delete G.revealedHandForPlayer;
+			delete G.revealedCardForDisplay;
+			delete G.skipCheckCacheThisTurn;
+			delete G.startPhaseAbilitiesPushed;
+			delete G.endPhaseAbilitiesPushed;
+			delete G.opponentCannotCompileNextTurn;
 			const endTurn = events?.endTurn ?? (ctx as Ctx & { events?: { endTurn?: () => void } }).events?.endTurn;
 			if (endTurn) endTurn();
 			break;
@@ -1369,9 +1847,11 @@ export const gameDef = defineGame<CompileGameState>({
 			const valid: EffectType[] = [
 				'draw', 'discard', 'delete', 'return', 'shift', 'shiftAllInLine', 'flip', 'flipMultiple', 'reveal',
 				'drawThenDiscardThenReveal', 'revealFaceDownThenOptional', 'discardThenDraw', 'drawThenDiscard', 'discardThenReturn', 'discardThenDelete',
+				'discardThenOpponentDiscardsPlusOne', 'opponentDiscardThenRearrangeTheirProtocols', 'opponentDiscardThenShiftTheirCard',
+				'drawThenRearrange', 'rearrangeOpponentProtocols',
 				'playFromHandFaceDownAnotherLine', 'playTopOfDeckFaceDownUnderThisCard', 'opponentPlayTopOfDeckFaceDownInLine',
 				'playTopOfDeckFaceDownInEachLineWhereYouHaveCard', 'playTopOfDeckFaceDownAnotherLine', 'playOneCard',
-				'playTopOfDeckFaceDownInEachOtherLine', 'refreshThenDraw', 'rearrange', 'skipCheckCache',
+				'playTopOfDeckFaceDownInEachOtherLine', 'refreshThenDraw', 'rearrange', 'skipCheckCache', 'eitherDiscardOrFlipThis',
 			];
 			if (typeof effectType !== 'string' || !valid.includes(effectType as EffectType)) return 'Invalid effect type';
 			if (effectType === 'draw' && typeof params === 'object' && params !== null && 'playerId' in params && 'count' in params) {
@@ -1400,7 +1880,17 @@ export const gameDef = defineGame<CompileGameState>({
 			if (effectType === 'playTopOfDeckFaceDownInEachOtherLine') return true;
 			if (effectType === 'refreshThenDraw') return true;
 			if (effectType === 'rearrange' && typeof params === 'object' && params !== null && Array.isArray((params as { permutation?: unknown }).permutation)) return true;
+			if (effectType === 'discardThenOpponentDiscardsPlusOne' && typeof params === 'object' && params !== null && 'playerId' in params && 'cardIds' in params) return true;
+			if (effectType === 'opponentDiscardThenRearrangeTheirProtocols' && typeof params === 'object' && params !== null && 'opponentId' in params && Array.isArray((params as { permutation?: unknown }).permutation)) return true;
+			if (effectType === 'opponentDiscardThenShiftTheirCard' && typeof params === 'object' && params !== null && 'opponentId' in params && 'fromColumnIndex' in params && 'fromStackIndex' in params && 'toColumnIndex' in params) return true;
+			if (effectType === 'drawThenRearrange' && typeof params === 'object' && params !== null && 'playerId' in params && 'drawCount' in params && Array.isArray((params as { permutation?: unknown }).permutation)) return true;
+			if (effectType === 'rearrangeOpponentProtocols' && typeof params === 'object' && params !== null && 'opponentId' in params && Array.isArray((params as { permutation?: unknown }).permutation)) return true;
 			if (effectType === 'skipCheckCache') return true;
+			if (effectType === 'eitherDiscardOrFlipThis' && typeof params === 'object' && params !== null && 'choice' in params) {
+				const p = params as { choice: string; cardIds?: unknown };
+				if (p.choice === 'flip') return true;
+				if (p.choice === 'discard' && Array.isArray(p.cardIds) && p.cardIds.length === 1) return true;
+			}
 			return 'Invalid effect params';
 		}
 		return true;

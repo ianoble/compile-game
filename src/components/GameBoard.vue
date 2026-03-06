@@ -81,6 +81,12 @@ const isDiscardThenDrawMode = computed(
 		pendingAbilityEffect.value?.type === 'discardThenDraw' &&
 		pendingAbilityEffect.value.params?.playerId === myId.value
 );
+/** True when we must choose 1+ cards to discard; opponent then discards that many + 1 (Plague 2). */
+const isDiscardThenOpponentDiscardsPlusOneMode = computed(
+	() =>
+		pendingAbilityEffect.value?.type === 'discardThenOpponentDiscardsPlusOne' &&
+		pendingAbilityEffect.value.params?.playerId === myId.value
+);
 /** Number of cards we must select to discard; 0 when not in fixed-count discard mode. */
 const discardRequiredCount = computed(() =>
 	pendingAbilityEffect.value?.type === 'discard'
@@ -98,11 +104,12 @@ const discardThenTargetStep = ref<'prompt' | 'choose_discard' | 'choose_target'>
 /** When we chose to discard and are now picking the return/delete target. */
 const selectedDiscardForTarget = ref<string | null>(null);
 
-/** When in discard or discard-then-draw or discard-then-return/delete (choose_discard) mode, use horizontal hand and click-to-select. */
+/** When in discard or discard-then-draw or discard-then-opponent-discards or discard-then-return/delete (choose_discard) mode, use horizontal hand and click-to-select. */
 const isDiscardChoiceMode = computed(
 	() =>
 		isDiscardSelectionMode.value ||
 		isDiscardThenDrawMode.value ||
+		isDiscardThenOpponentDiscardsPlusOneMode.value ||
 		(isDiscardThenTargetMode.value && discardThenTargetStep.value === 'choose_discard')
 );
 /** For discard-then-draw: draw = discarded count + this bonus (from card text "plus 1"). */
@@ -211,7 +218,7 @@ function onHandPointerDown(idx: number, ev: PointerEvent) {
 					const sel = discardSelection.value;
 					const inSel = sel.includes(id);
 					if (inSel) discardSelection.value = sel.filter(x => x !== id);
-					else if (isDiscardThenDrawMode.value) discardSelection.value = [...sel, id];
+					else if (isDiscardThenDrawMode.value || isDiscardThenOpponentDiscardsPlusOneMode.value) discardSelection.value = [...sel, id];
 					else if (isDiscardThenTargetMode.value && discardThenTargetStep.value === 'choose_discard') discardSelection.value = sel.length < 1 ? [...sel, id] : sel;
 					else if (sel.length < discardRequiredCount.value) discardSelection.value = [...sel, id];
 				}
@@ -509,6 +516,21 @@ function submitDiscardThenDraw() {
 	const ok = canDo('applyEffect', 'discardThenDraw', params);
 	if (ok === true) {
 		move('applyEffect', 'discardThenDraw', params);
+		discardSelection.value = [];
+	}
+}
+
+/** Submit chosen cards for discard-then-opponent-discards-plus-one (1+ cards; opponent discards that many + 1). */
+function submitDiscardThenOpponentDiscardsPlusOne() {
+	if (!isDiscardThenOpponentDiscardsPlusOneMode.value || discardSelection.value.length < 1) return;
+	const effect = pendingAbilityEffect.value;
+	if (!effect || effect.type !== 'discardThenOpponentDiscardsPlusOne') return;
+	const playerId = effect.params?.playerId as string;
+	if (!playerId || playerId !== myId.value) return;
+	const params = { playerId, cardIds: [...discardSelection.value] };
+	const ok = canDo('applyEffect', 'discardThenOpponentDiscardsPlusOne', params);
+	if (ok === true) {
+		move('applyEffect', 'discardThenOpponentDiscardsPlusOne', params);
 		discardSelection.value = [];
 	}
 }
@@ -853,12 +875,16 @@ function submitPlayOneCard() {
 /** Rearrange (swap 2 protocols): pick two columns to swap. */
 const selectedRearrangeCol1 = ref<number | null>(null);
 const selectedRearrangeCol2 = ref<number | null>(null);
+const selectedEitherDiscardCard = ref<string | null>(null);
 watch(
 	() => pendingAbilityEffect.value?.type,
 	(type) => {
 		if (type !== 'rearrange') {
 			selectedRearrangeCol1.value = null;
 			selectedRearrangeCol2.value = null;
+		}
+		if (type !== 'eitherDiscardOrFlipThis') {
+			selectedEitherDiscardCard.value = null;
 		}
 	}
 );
@@ -1427,6 +1453,42 @@ function fanStyleHover(idx: number): { transform: string; marginLeft: string; zI
 					Resolve
 				</button>
 			</template>
+			<template v-else-if="isMyTurn && pendingAbilityEffect?.type === 'eitherDiscardOrFlipThis'">
+				<span class="text-slate-300 text-sm">Either discard 1 card or flip this card</span>
+				<button
+					type="button"
+					class="px-3 py-1.5 rounded-lg border border-amber-500/50 bg-amber-500/10 text-amber-300 text-sm font-medium hover:bg-amber-500/20"
+					@click="move('applyEffect', 'eitherDiscardOrFlipThis', { choice: 'flip' })"
+				>
+					Flip this card
+				</button>
+				<template v-if="myHand.length > 0">
+					<span class="text-slate-400 text-xs">or choose a card to discard:</span>
+					<div class="flex flex-wrap gap-2">
+						<button
+							v-for="cardId in myHand"
+							:key="cardId"
+							type="button"
+							class="rounded-lg border px-3 py-1.5 text-sm transition-colors"
+							:class="selectedEitherDiscardCard === cardId ? 'border-amber-400 bg-amber-500/20 text-amber-200' : 'border-slate-500/50 bg-slate-500/10 text-slate-300'"
+							@click="selectedEitherDiscardCard = selectedEitherDiscardCard === cardId ? null : cardId"
+						>
+							{{ (getCommandCardById(cardId)?.name ?? cardId).slice(0, 20) }}
+						</button>
+					</div>
+					<button
+						v-if="selectedEitherDiscardCard"
+						type="button"
+						class="px-3 py-1.5 rounded-lg border border-amber-500/50 bg-amber-500/10 text-amber-300 text-sm font-medium hover:bg-amber-500/20"
+						@click="
+							move('applyEffect', 'eitherDiscardOrFlipThis', { choice: 'discard', cardIds: [selectedEitherDiscardCard] });
+							selectedEitherDiscardCard = null;
+						"
+					>
+						Discard selected
+					</button>
+				</template>
+			</template>
 			<template v-else-if="isMyTurn && pendingAbilityEffect?.type === 'rearrange'">
 				<span class="text-slate-300 text-sm">Swap the positions of 2 of your protocols</span>
 				<div class="flex flex-wrap gap-2 items-center">
@@ -1544,12 +1606,12 @@ function fanStyleHover(idx: number): { transform: string; marginLeft: string; zI
 					Skip
 				</button>
 				<button
-					v-else-if="pendingAbilityEffect.type !== 'draw' && pendingAbilityEffect.type !== 'discardThenDraw' && pendingAbilityEffect.type !== 'discardThenReturn' && pendingAbilityEffect.type !== 'discardThenDelete' && pendingAbilityEffect.type !== 'delete' && pendingAbilityEffect.type !== 'return' && pendingAbilityEffect.type !== 'flip' && pendingAbilityEffect.type !== 'flipMultiple' && pendingAbilityEffect.type !== 'shift' && pendingAbilityEffect.type !== 'shiftAllInLine' && pendingAbilityEffect.type !== 'reveal' && pendingAbilityEffect.type !== 'drawThenDiscardThenReveal' && pendingAbilityEffect.type !== 'revealFaceDownThenOptional' && pendingAbilityEffect.type !== 'playFromHandFaceDownAnotherLine' && pendingAbilityEffect.type !== 'playTopOfDeckFaceDownAnotherLine' && pendingAbilityEffect.type !== 'playOneCard' && pendingAbilityEffect.type !== 'rearrange' && pendingAbilityEffect.type !== 'skipCheckCache'"
+					v-else-if="pendingAbilityEffect.type !== 'draw' && pendingAbilityEffect.type !== 'discardThenDraw' && pendingAbilityEffect.type !== 'discardThenReturn' && pendingAbilityEffect.type !== 'discardThenDelete' && pendingAbilityEffect.type !== 'delete' && pendingAbilityEffect.type !== 'return' && pendingAbilityEffect.type !== 'flip' && pendingAbilityEffect.type !== 'flipMultiple' && pendingAbilityEffect.type !== 'shift' && pendingAbilityEffect.type !== 'shiftAllInLine' && pendingAbilityEffect.type !== 'reveal' && pendingAbilityEffect.type !== 'drawThenDiscardThenReveal' && pendingAbilityEffect.type !== 'revealFaceDownThenOptional' && pendingAbilityEffect.type !== 'playFromHandFaceDownAnotherLine' && pendingAbilityEffect.type !== 'playTopOfDeckFaceDownAnotherLine' && pendingAbilityEffect.type !== 'playOneCard' && pendingAbilityEffect.type !== 'rearrange' && pendingAbilityEffect.type !== 'skipCheckCache' && pendingAbilityEffect.type !== 'eitherDiscardOrFlipThis'"
 					type="button"
 					class="px-3 py-1.5 rounded-lg border border-amber-500/50 bg-amber-500/10 text-amber-300 text-sm font-medium hover:bg-amber-500/20 transition-colors"
 					@click="resolveTopAbility"
 				>
-					{{ pendingAbilityEffect.type === 'skipCheckCache' ? 'Skip check cache' : pendingAbilityEffect.type === 'drawThenDiscard' ? 'Draw & opponent discards' : 'Resolve ability' }}
+					Resolve ability
 				</button>
 			</template>
 		</div>
