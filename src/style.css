@@ -74,11 +74,11 @@ body::after {
 
 /* Card dimensions: 2.5:3.5 ratio (standard). Protocol = horizontal (3.5:2.5), Command = vertical (2.5:3.5). */
 .card-vertical {
-	width: 6rem;   /* 96px; height becomes 8.4rem (134px) via aspect-ratio */
+	width: 7.5rem;   /* 120px; height 10.5rem via aspect-ratio - more room for ability text */
 	aspect-ratio: 2.5 / 3.5;
 }
 .card-vertical-hand {
-	width: 7rem;   /* 112px; height 9.8rem (157px) - hand cards slightly larger */
+	width: 12.5rem;   /* 200px; height ~17.5rem - larger hand cards */
 	aspect-ratio: 2.5 / 3.5;
 }
 .card-protocol {
@@ -103,6 +103,54 @@ body::after {
 	font-family: var(--font-display);
 	color: var(--cyber-cyan);
 	text-shadow: 0 0 8px rgba(34, 211, 238, 0.4);
+}
+
+/* Command card face: value (top-left), name, and three ability rows */
+.command-card-value {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 1.5rem;
+	font-size: 0.75rem;
+	font-weight: 700;
+	font-family: var(--font-display);
+	color: var(--cyber-cyan);
+	border: 1px solid var(--cyber-border);
+	border-radius: 0.2rem;
+	padding: 0.1rem 0.25rem;
+	flex-shrink: 0;
+}
+.command-card-name {
+	font-size: 0.65rem;
+	font-weight: 600;
+	font-family: var(--font-display);
+	color: var(--cyber-text);
+	line-height: 1.15;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	flex: 1;
+	min-width: 0;
+}
+.command-card-ability {
+	font-size: 0.625rem;
+	line-height: 1.25;
+	color: var(--cyber-muted);
+	border: 1px solid var(--cyber-border);
+	border-radius: 0.2rem;
+	padding: 0.2rem 0.3rem;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	display: -webkit-box;
+	-webkit-line-clamp: 3;
+	-webkit-box-orient: vertical;
+	flex-shrink: 0;
+}
+.command-card-ability-emphasis {
+	font-weight: 600;
+	color: var(--cyber-cyan);
 }
 
 /* Fixed hand tray (play phase): content teleported here from GameBoard */

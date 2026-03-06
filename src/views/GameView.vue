@@ -347,6 +347,9 @@ async function abandonGame() {
 						<template v-else>
 							<span class="text-slate-500">Opponent's turn</span>
 						</template>
+						<span v-if="phase === 'play' && G.turnPhase" class="text-slate-500">
+							· Phase: <span class="text-slate-400">{{ G.turnPhase }}</span>
+						</span>
 					</div>
 				</div>
 
@@ -420,9 +423,10 @@ async function abandonGame() {
 				</p>
 			</div>
 			</div>
+			<!-- Teleport target must exist before GameBoard mounts; v-show keeps it in DOM so Teleport can find it -->
 			<div
-				v-if="phase === 'play' && !reconnecting"
 				id="game-hand-tray"
+				v-show="phase === 'play' && !reconnecting"
 				class="game-hand-tray fixed bottom-0 left-0 right-0 z-10 min-h-[180px] pointer-events-none"
 			/>
 		</div>
