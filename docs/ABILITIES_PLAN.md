@@ -26,7 +26,8 @@ This plan follows [ABILITIES_STRATEGY.md](./ABILITIES_STRATEGY.md): implement by
 | 6 | **reveal** | 3        | **Done** | "Your opponent reveals their hand"; "Draw 2, opponent discards 2, then reveal hand" (Psychic 0); "Reveal 1 face-down card. You may shift or flip that card." (Light 2). Overlay for hand/card; cleared when turn ends. |
 | 7 | **refresh** | 1        | **Done** | "Refresh. Draw 1 card." (Spirit 0) – draw to 5 (refresh), then draw N more. Effect type refreshThenDraw. |
 | 8 | **rearrange** | 1      | **Done** | "Swap the positions of 2 of your protocols" (Spirit 4). Effect type rearrange; client picks 2 columns to swap; uses existing protocol permutation logic. |
-| 9 | **other**  | 3         | Todo     | Value modifiers, "Skip check cache", etc. – handle case-by-case. |
+| 9 | **Speed (after clear cache)** | 1 | **Done** | "After you clear cache: Draw 1 card." (Speed 1). Trigger: pushed in Check Cache when player discards down to 5; effect = draw. Only face-up uncovered cards trigger. |
+| 10 | **other**  | 3         | **Done** | Skip check cache (Spirit 0 bottom); face-down value 4 in stack (Darkness 2 top); play face-up without matching (Spirit 1 top). skipCheckCache effect + UI; value 4 and play-without-matching are passive (server already uses setup data). |
 
 ---
 

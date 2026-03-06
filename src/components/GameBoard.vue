@@ -1417,6 +1417,16 @@ function fanStyleHover(idx: number): { transform: string; marginLeft: string; zI
 					</button>
 				</div>
 			</template>
+			<template v-else-if="isMyTurn && pendingAbilityEffect?.type === 'skipCheckCache'">
+				<span class="text-slate-300 text-sm">Skip your check cache phase</span>
+				<button
+					type="button"
+					class="px-3 py-1.5 rounded-lg border border-amber-500/50 bg-amber-500/10 text-amber-300 text-sm font-medium hover:bg-amber-500/20"
+					@click="resolveTopAbility"
+				>
+					Resolve
+				</button>
+			</template>
 			<template v-else-if="isMyTurn && pendingAbilityEffect?.type === 'rearrange'">
 				<span class="text-slate-300 text-sm">Swap the positions of 2 of your protocols</span>
 				<div class="flex flex-wrap gap-2 items-center">
@@ -1534,7 +1544,7 @@ function fanStyleHover(idx: number): { transform: string; marginLeft: string; zI
 					Skip
 				</button>
 				<button
-					v-else-if="pendingAbilityEffect.type !== 'draw' && pendingAbilityEffect.type !== 'discardThenDraw' && pendingAbilityEffect.type !== 'discardThenReturn' && pendingAbilityEffect.type !== 'discardThenDelete' && pendingAbilityEffect.type !== 'delete' && pendingAbilityEffect.type !== 'return' && pendingAbilityEffect.type !== 'flip' && pendingAbilityEffect.type !== 'flipMultiple' && pendingAbilityEffect.type !== 'shift' && pendingAbilityEffect.type !== 'shiftAllInLine' && pendingAbilityEffect.type !== 'reveal' && pendingAbilityEffect.type !== 'drawThenDiscardThenReveal' && pendingAbilityEffect.type !== 'revealFaceDownThenOptional' && pendingAbilityEffect.type !== 'playFromHandFaceDownAnotherLine' && pendingAbilityEffect.type !== 'playTopOfDeckFaceDownAnotherLine' && pendingAbilityEffect.type !== 'playOneCard' && pendingAbilityEffect.type !== 'rearrange'"
+					v-else-if="pendingAbilityEffect.type !== 'draw' && pendingAbilityEffect.type !== 'discardThenDraw' && pendingAbilityEffect.type !== 'discardThenReturn' && pendingAbilityEffect.type !== 'discardThenDelete' && pendingAbilityEffect.type !== 'delete' && pendingAbilityEffect.type !== 'return' && pendingAbilityEffect.type !== 'flip' && pendingAbilityEffect.type !== 'flipMultiple' && pendingAbilityEffect.type !== 'shift' && pendingAbilityEffect.type !== 'shiftAllInLine' && pendingAbilityEffect.type !== 'reveal' && pendingAbilityEffect.type !== 'drawThenDiscardThenReveal' && pendingAbilityEffect.type !== 'revealFaceDownThenOptional' && pendingAbilityEffect.type !== 'playFromHandFaceDownAnotherLine' && pendingAbilityEffect.type !== 'playTopOfDeckFaceDownAnotherLine' && pendingAbilityEffect.type !== 'playOneCard' && pendingAbilityEffect.type !== 'rearrange' && pendingAbilityEffect.type !== 'skipCheckCache'"
 					type="button"
 					class="px-3 py-1.5 rounded-lg border border-amber-500/50 bg-amber-500/10 text-amber-300 text-sm font-medium hover:bg-amber-500/20 transition-colors"
 					@click="resolveTopAbility"

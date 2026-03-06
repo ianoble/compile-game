@@ -351,6 +351,10 @@ export function useBotPlayers(matchIDRef: Ref<string>, _humanPlayerID: Ref<strin
 						moves.applyEffect('refreshThenDraw', effect.params);
 						return;
 					}
+					if (effect.type === 'skipCheckCache') {
+						moves.applyEffect('skipCheckCache', {});
+						return;
+					}
 					if (effect.type === 'rearrange') {
 						const a = Math.floor(Math.random() * 3);
 						let b = Math.floor(Math.random() * 3);

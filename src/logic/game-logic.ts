@@ -1130,7 +1130,7 @@ function runOnePhaseStep(
 					if (!col || col.commandStack.length === 0) continue;
 					const topIdx = col.commandStack.length - 1;
 					const top = col.commandStack[topIdx];
-					if (!top || top.owner !== playerId) continue;
+					if (!top || top.owner !== playerId || !top.faceUp) continue;
 					const rows = G.cardAfterClearCacheRows[top.cardId];
 					if (rows) {
 						for (const abilityRow of rows) {
