@@ -377,6 +377,17 @@ watch(
 	}
 );
 
+// Register drop zones when columns become available (fixes first-drag before onMounted completes)
+watch(
+	() => G.value?.columns,
+	(cols) => {
+		if (cols && cols.length > 0) {
+			nextTick(registerLaneDropZones);
+		}
+	},
+	{ immediate: true }
+);
+
 function onDragPointerMove(ev: PointerEvent) {
 	const x = ev.clientX;
 	const y = ev.clientY;
