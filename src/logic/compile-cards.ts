@@ -102,15 +102,16 @@ function createProtocolDeck(): ProtocolCard[] {
 	});
 }
 
-/** Build command cards for one protocol from MN01 cards. Take up to 6 cards (sorted by repo value), game value = repo value + 1. */
+/** Build command cards for one protocol from MN01 cards. Take up to 6 cards (sorted by repo value), game value = repo value + 1.
+ * Id uses the source card's value (e.g. protocol-1-command-0, protocol-1-command-1) so lookup always matches the correct card. */
 function buildCommandCardsForProtocol(protocolId: string, protocolName: string): CommandCard[] {
 	const protocolCards = MN01_CARDS
 		.filter(c => c.protocol === protocolName)
 		.sort((a, b) => a.value - b.value)
 		.slice(0, 6);
-	return protocolCards.map((c, idx) => {
+	return protocolCards.map((c) => {
 		const gameValue = c.value + 1;
-		const id = `${protocolId}-command-${idx + 1}`;
+		const id = `${protocolId}-command-${c.value}`;
 		const name = [c.top.text, c.middle.text, c.bottom.text].find(Boolean)?.trim() || `${protocolName} ${gameValue}`;
 		return {
 			id,
@@ -676,6 +677,19 @@ export function getEffectForAbility(
 		const count = m ? Math.min(parseInt(m[1], 10), 10) : 1;
 		return { type: 'draw', params: { playerId: otherId, count } };
 	}
+	// "Refresh. Draw N card(s)." – do Refresh (draw up to 5), then draw N more. Must be before generic "Draw N cards".
+	if (t.includes('refresh') && t.includes('draw')) {
+		const drawMatch = text.match(/draw\s+(\d+)\s*card/i);
+		const drawCount = drawMatch ? Math.min(parseInt(drawMatch[1], 10), 10) : 1;
+		return { type: 'refreshThenDraw', params: { drawCount } };
+	}
+	// "Flip 1 other card. Draw N cards." / "Flip 1 card. Draw N cards." – choose flip target first, then draw.
+	if ((t.includes('flip 1') || t.includes('flip this')) && t.includes('draw') && /\d+\s*card/.test(t)) {
+		const drawMatch = text.match(/draw\s+(\d+)\s*card/i);
+		const drawCount = drawMatch ? Math.min(parseInt(drawMatch[1], 10), 10) : 1;
+		const excludeSource = t.includes('other');
+		return { type: 'flipThenDraw', params: { drawCount, excludeSource } };
+	}
 	// "Draw N cards" (self, no "you") e.g. "Draw 2 cards. Your opponent cannot compile on their next turn."
 	if (
 		t.includes('draw') && /\d+\s*card/.test(t) &&
@@ -769,12 +783,6 @@ export function getEffectForAbility(
 	if (t.includes('rearrange') && t.includes('their') && t.includes('protocol')) {
 		const otherId = ownerId === '0' ? '1' : '0';
 		return { type: 'rearrangeOpponentProtocols', params: { opponentId: otherId } };
-	}
-	// "Refresh. Draw 1 card." – draw to 5 (refresh), then draw N more
-	if (t.includes('refresh') && t.includes('draw')) {
-		const drawMatch = text.match(/draw\s+(\d+)\s*card/i);
-		const drawCount = drawMatch ? Math.min(parseInt(drawMatch[1], 10), 10) : 1;
-		return { type: 'refreshThenDraw', params: { drawCount } };
 	}
 	// "Either discard 1 card or flip this card." (Spirit 1 bottom)
 	if ((t.includes('either') && t.includes('or')) && t.includes('discard') && t.includes('flip this card')) {

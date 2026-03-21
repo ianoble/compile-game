@@ -78,7 +78,7 @@ export interface CompilePlayerState {
 	discard: string[];
 }
 
-/** Turn phases within the play phase. */
+/** Turn phases within the play phase. Order: Start → Check Control → Check Compile → Action → Check Cache → End */
 export type TurnPhase =
 	| 'Start'
 	| 'CheckControl'
@@ -616,7 +616,7 @@ function playCommandCard(
 	applyPlayToColumn(G, ctx, events, columnIndex, handIndex, faceUp, playerId);
 }
 
-/** Actually add the card to the column (from hand), push triggers, check compile. Used by playCommandCard and when applying pendingPlay. */
+/** Actually add the card to the column (from hand), push triggers. Compile is only checked at start of turn (Check Compile phase). Used by playCommandCard and when applying pendingPlay. */
 function applyPlayToColumn(
 	G: CompileGameState,
 	ctx: Ctx,
@@ -650,10 +650,7 @@ function applyPlayToColumn(
 			pushAbility(G, { columnIndex, stackIndex: newStackIdx, cardId, owner: playerId, abilityRow });
 		}
 	}
-	if (columnSumWithModifiers(G, columnIndex) >= COMPILE_THRESHOLD) {
-		const deferred = performCompile(G, columnIndex, playerId);
-		if (!deferred) G.compiledThisTurn = true;
-	}
+	// Compile is only checked at start of turn (Check Compile phase), not when playing a card.
 	const stackLen = (G.abilityResolutionStack ?? []).length;
 	if (stackLen === 0) {
 		if (G.compilePendingColumn != null && G.compilePendingPlayerId != null) {
@@ -712,6 +709,7 @@ export type EffectType =
 	| 'playTopOfDeckFaceDownInEachLineWhereYouHaveCard' | 'playTopOfDeckFaceDownAnotherLine' | 'playOneCard'
 	| 'playTopOfDeckFaceDownInEachOtherLine'
 	| 'refreshThenDraw'
+	| 'flipThenDraw'
 	| 'rearrange'
 	| 'skipCheckCache'
 	| 'eitherDiscardOrFlipThis';
@@ -729,6 +727,7 @@ export type EffectParams =
 	| { type: 'shift'; fromColumnIndex: number; fromStackIndex: number; toColumnIndex: number }
 	| { type: 'shiftAllInLine'; fromColumnIndex: number; toColumnIndex: number }
 	| { type: 'flip'; columnIndex: number; stackIndex: number }
+	| { type: 'flipThenDraw'; columnIndex: number; stackIndex: number; drawCount: number }
 	| { type: 'flipMultiple'; targets: Array<{ columnIndex: number; stackIndex: number }> }
 	| { type: 'discardThenOpponentDiscardsPlusOne'; playerId: string; cardIds: string[] }
 	| { type: 'opponentDiscardThenRearrangeTheirProtocols'; opponentId: string; permutation: [number, number, number] }
@@ -1014,6 +1013,31 @@ function applyEffect({ G, ctx, events }: MoveContext, effectType: EffectType, pa
 			}
 			break;
 		}
+		case 'flipThenDraw': {
+			const p = params as { columnIndex: number; stackIndex: number; drawCount: number };
+			if (typeof p?.columnIndex !== 'number' || typeof p?.stackIndex !== 'number' || typeof p?.drawCount !== 'number') return INVALID_MOVE;
+			const col = G.columns[p.columnIndex];
+			if (!col || p.stackIndex < 0 || p.stackIndex >= col.commandStack.length) return INVALID_MOVE;
+			const card = col.commandStack[p.stackIndex];
+			if (!card) return INVALID_MOVE;
+			card.faceUp = !card.faceUp;
+			if (card.faceUp) {
+				card.value = G.cardIdToValue[card.cardId] ?? 0;
+				if (G.cardTriggerRows?.[card.cardId]?.length) {
+					for (const abilityRow of G.cardTriggerRows[card.cardId]) {
+						pushAbility(G, { columnIndex: p.columnIndex, stackIndex: p.stackIndex, cardId: card.cardId, owner: card.owner, abilityRow });
+					}
+				}
+			} else {
+				card.value = 2;
+				removeAbilitiesForCard(G, p.columnIndex, p.stackIndex);
+			}
+			const playerId = ctx.currentPlayer;
+			const drawCount = Math.min(Math.max(0, p.drawCount), 10);
+			drawFromDeck(G, playerId, drawCount);
+			pushAbilitiesForPlayerFaceUpUncovered(G, playerId, G.cardAfterDrawRows);
+			break;
+		}
 		case 'reveal': {
 			const otherId = ctx.currentPlayer === '0' ? '1' : '0';
 			const opp = G.players[otherId];
@@ -1194,10 +1218,7 @@ function applyEffect({ G, ctx, events }: MoveContext, effectType: EffectType, pa
 					pushAbility(G, { columnIndex: p.columnIndex, stackIndex: newStackIdx, cardId, owner: playerId, abilityRow });
 				}
 			}
-			if (columnSumWithModifiers(G, p.columnIndex) >= COMPILE_THRESHOLD) {
-				const deferred = performCompile(G, p.columnIndex, playerId);
-				if (!deferred) G.compiledThisTurn = true;
-			}
+			// Compile is only checked at start of turn (Check Compile phase), not when an ability plays a card.
 			break;
 		}
 		case 'skipCheckCache': {
@@ -1216,6 +1237,7 @@ function applyEffect({ G, ctx, events }: MoveContext, effectType: EffectType, pa
 			break;
 		}
 		case 'refreshThenDraw': {
+			// "Refresh. Draw N card(s)." – do Refresh for free (draw up to 5), then draw N more.
 			const p = params as { drawCount?: number };
 			const drawCount = Math.min(Math.max(0, (p?.drawCount ?? 1)), 10);
 			const playerId = ctx.currentPlayer;
@@ -1656,7 +1678,7 @@ function advanceToAction({ G, ctx, events }: MoveContext): typeof INVALID_MOVE |
 	let phase = G.turnPhase ?? 'Start';
 	if (phase === 'Action') return; // Already in Action; no-op
 
-	// Run Start → CheckControl → CheckCompile until we reach Action or CheckCache
+	// Run Start → Check Control → Check Compile until we reach Action or CheckCache
 	while (phase === 'Start' || phase === 'CheckControl' || phase === 'CheckCompile') {
 		runOnePhaseStep(G, ctx, events);
 		phase = G.turnPhase ?? 'Start';
@@ -1693,7 +1715,7 @@ function onPlayPhaseBegin({ G }: { G: CompileGameState }): void {
 		player.discard = [];
 	}
 
-	// Skip Start on first turn (no cards on board); later turns may show Start only if player has face-up Start-ability cards
+	// Turn order: Start → Check Control → Check Compile → Action → Check Cache → End. First turn begins at Check Control.
 	G.turnPhase = 'CheckControl';
 	G.compiledThisTurn = false;
 	G.controlPlayerId = null;
@@ -1851,7 +1873,7 @@ export const gameDef = defineGame<CompileGameState>({
 				'drawThenRearrange', 'rearrangeOpponentProtocols',
 				'playFromHandFaceDownAnotherLine', 'playTopOfDeckFaceDownUnderThisCard', 'opponentPlayTopOfDeckFaceDownInLine',
 				'playTopOfDeckFaceDownInEachLineWhereYouHaveCard', 'playTopOfDeckFaceDownAnotherLine', 'playOneCard',
-				'playTopOfDeckFaceDownInEachOtherLine', 'refreshThenDraw', 'rearrange', 'skipCheckCache', 'eitherDiscardOrFlipThis',
+				'playTopOfDeckFaceDownInEachOtherLine', 'refreshThenDraw', 'flipThenDraw', 'rearrange', 'skipCheckCache', 'eitherDiscardOrFlipThis',
 			];
 			if (typeof effectType !== 'string' || !valid.includes(effectType as EffectType)) return 'Invalid effect type';
 			if (effectType === 'draw' && typeof params === 'object' && params !== null && 'playerId' in params && 'count' in params) {
@@ -1865,6 +1887,7 @@ export const gameDef = defineGame<CompileGameState>({
 			if (effectType === 'discardThenReturn' && typeof params === 'object' && params !== null && 'playerId' in params && 'discardCardId' in params) return true;
 			if (effectType === 'discardThenDelete' && typeof params === 'object' && params !== null && 'playerId' in params && 'discardCardId' in params) return true;
 			if ((effectType === 'delete' || effectType === 'return' || effectType === 'flip') && typeof params === 'object' && params !== null && 'columnIndex' in params && 'stackIndex' in params) return true;
+			if (effectType === 'flipThenDraw' && typeof params === 'object' && params !== null && 'columnIndex' in params && 'stackIndex' in params && 'drawCount' in params) return true;
 			if (effectType === 'flipMultiple' && typeof params === 'object' && params !== null && Array.isArray((params as { targets?: unknown }).targets)) return true;
 			if (effectType === 'shift' && typeof params === 'object' && params !== null && 'fromColumnIndex' in params && 'fromStackIndex' in params && 'toColumnIndex' in params) return true;
 			if (effectType === 'shiftAllInLine' && typeof params === 'object' && params !== null && 'fromColumnIndex' in params && 'toColumnIndex' in params) return true;

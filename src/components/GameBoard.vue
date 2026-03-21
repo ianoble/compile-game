@@ -27,16 +27,6 @@ const isActionPhase = computed(() => turnPhase.value === 'Action');
 const canPlayCard = computed(
 	() => isMyTurn.value && isActionPhase.value && myHand.value.length > 0
 );
-// When it's our turn and we're not in Action, auto-advance (Start → CheckControl → CheckCompile → Action, or CheckCache → End → endTurn).
-watch(
-	() => ({ myTurn: isMyTurn.value, phase: turnPhase.value }),
-	({ myTurn, phase }) => {
-		if (myTurn && phase != null && phase !== 'Action') {
-			move('advanceToAction');
-		}
-	},
-	{ immediate: true }
-);
 
 /** Raw hand from server: card ids or '[hidden]'. */
 const myHand = computed(() => {
@@ -47,6 +37,25 @@ const myHand = computed(() => {
 
 /** LIFO ability resolution stack (from server). */
 const abilityResolutionStack = computed(() => G.value?.abilityResolutionStack ?? []);
+
+// When it's our turn and we're not in Action, auto-advance (Start → Check Control → Check Compile → Action → Check Cache → End → endTurn).
+// Do NOT auto-advance when in Start or End with abilities on the stack — player must resolve those first.
+// Watch a stable string so Vue doesn't re-run callback on every tick (object reference would change each time).
+watch(
+	() =>
+		`${isMyTurn.value}-${turnPhase.value}-${abilityResolutionStack.value.length}`,
+	(_, __, onCleanup) => {
+		if (!isMyTurn.value || turnPhase.value == null || turnPhase.value === 'Action') return;
+		if ((turnPhase.value === 'Start' || turnPhase.value === 'End') && abilityResolutionStack.value.length > 0) return;
+		let cancelled = false;
+		onCleanup(() => { cancelled = true; });
+		nextTick(() => {
+			if (!cancelled) move('advanceToAction');
+		});
+	},
+	{ immediate: true }
+);
+
 /** Top entry to resolve (last in array = LIFO). */
 const topAbilityEntry = computed((): AbilityResolutionEntry | null => {
 	const stack = abilityResolutionStack.value;
@@ -161,6 +170,21 @@ watch(
 			move('refreshHand');
 			nextTick(() => move('advanceToAction'));
 		}
+	},
+	{ immediate: true }
+);
+
+// "Refresh. Draw N card(s)." – resolve automatically (no button); effect draws up to 5 then N more.
+watch(
+	() => (isMyTurn.value && isOwnerOfTopAbility.value && pendingAbilityEffect.value?.type === 'refreshThenDraw' ? pendingAbilityEffect.value : null),
+	(effect) => {
+		if (!effect) return;
+		const drawCount = Math.min(Math.max(0, (effect.params as { drawCount?: number })?.drawCount ?? 1), 10);
+		nextTick(() => {
+			if (canDo('applyEffect', 'refreshThenDraw', { drawCount }) === true) {
+				move('applyEffect', 'refreshThenDraw', { drawCount });
+			}
+		});
 	},
 	{ immediate: true }
 );
@@ -588,21 +612,34 @@ function submitDiscardThenTarget(colIdx: number) {
 	}
 }
 
-/** Columns that have at least one card (uncovered = top of that column). */
-const columnsWithUncovered = computed(() =>
-	columns.value.map((col, idx) => (col.commandStack.length > 0 ? idx : -1)).filter(i => i >= 0)
-);
+/** Single source of truth: column indices that have at least one card (top of stack selectable). Iterate 0..NUM_COLUMNS-1 so Right is never skipped. */
+const columnIndicesWithTopCard = computed(() => {
+	const cols = columns.value;
+	return Array.from({ length: NUM_COLUMNS }, (_, idx) => idx).filter(
+		(idx) => (cols[idx]?.commandStack?.length ?? 0) > 0
+	);
+});
+/** Alias for "pick top card" abilities (flip, delete, return, shift). */
+const columnsWithUncovered = columnIndicesWithTopCard;
 
-/** For "Flip each other face-up card": list of { columnIndex, stackIndex } for all face-up cards except the source. */
+/** For "Flip 1 other card. Draw N": columns with uncovered card excluding the ability's source column. */
+const columnsWithUncoveredOther = computed(() => {
+	const entry = topAbilityEntry.value;
+	const list = columnsWithUncovered.value;
+	if (entry == null) return list;
+	return list.filter((colIdx) => colIdx !== entry.columnIndex);
+});
+
+/** For "Flip each other face-up card": list of { columnIndex, stackIndex } for all face-up cards except the source. Iterate 0..NUM_COLUMNS-1. */
 const flipMultipleAllOtherFaceUpTargets = computed(() => {
 	const entry = topAbilityEntry.value;
 	const cols = columns.value;
-	if (!entry || cols.length === 0) return [];
+	if (!entry) return [];
 	const srcCol = entry.columnIndex;
 	const srcStack = entry.stackIndex;
 	const out: { columnIndex: number; stackIndex: number }[] = [];
-	for (let c = 0; c < cols.length; c++) {
-		const stack = cols[c].commandStack;
+	for (let c = 0; c < NUM_COLUMNS; c++) {
+		const stack = cols[c]?.commandStack ?? [];
 		for (let s = 0; s < stack.length; s++) {
 			const card = stack[s];
 			if (card?.faceUp && !(c === srcCol && s === srcStack)) {
@@ -692,12 +729,13 @@ function submitShift(fromColIdx: number, toColIdx: number) {
 	}
 }
 
-/** Columns that have at least one face-down card (for "Shift all face-down in this line"). */
-const columnsWithFaceDownCard = computed(() =>
-	columns.value
-		.map((col, idx) => (col.commandStack.some((e: { faceUp?: boolean }) => !e.faceUp) ? idx : -1))
-		.filter((i) => i >= 0)
-);
+/** Columns that have at least one face-down card (for "Shift all face-down in this line"). Iterate 0..NUM_COLUMNS-1. */
+const columnsWithFaceDownCard = computed(() => {
+	const cols = columns.value;
+	return Array.from({ length: NUM_COLUMNS }, (_, idx) => idx).filter(
+		(idx) => (cols[idx]?.commandStack?.some((e: { faceUp?: boolean }) => !e.faceUp) ?? false)
+	);
+});
 /** For shiftAllInLine: selected source column. */
 const selectedShiftAllFromColumn = ref<number | null>(null);
 watch(
@@ -728,12 +766,12 @@ function submitShiftAllInLine(fromColIdx: number, toColIdx: number) {
 	}
 }
 
-/** All face-down card positions { columnIndex, stackIndex } (for "Reveal 1 face-down card. You may shift or flip."). */
+/** All face-down card positions { columnIndex, stackIndex } (for "Reveal 1 face-down card. You may shift or flip."). Iterate 0..NUM_COLUMNS-1. */
 const faceDownPositions = computed(() => {
 	const cols = columns.value;
 	const out: { columnIndex: number; stackIndex: number }[] = [];
-	for (let c = 0; c < cols.length; c++) {
-		const stack = cols[c].commandStack;
+	for (let c = 0; c < NUM_COLUMNS; c++) {
+		const stack = cols[c]?.commandStack ?? [];
 		for (let s = 0; s < stack.length; s++) {
 			if (stack[s] && !(stack[s] as { faceUp?: boolean }).faceUp) {
 				out.push({ columnIndex: c, stackIndex: s });
@@ -950,6 +988,39 @@ function submitSingleTargetEffect(effectType: 'delete' | 'return' | 'flip', colI
 	const params = { columnIndex: colIdx, stackIndex };
 	const ok = canDo('applyEffect', effectType, params);
 	if (ok === true) move('applyEffect', effectType, params);
+}
+
+/** Submit flip target for "Flip 1 other card. Draw N cards." – then server flips that card and draws. */
+function submitFlipThenDraw(colIdx: number) {
+	const col = columns.value[colIdx];
+	const effect = pendingAbilityEffect.value;
+	if (!col || col.commandStack.length === 0 || !effect || effect.type !== 'flipThenDraw') return;
+	const stackIndex = col.commandStack.length - 1;
+	const drawCount = Math.min(Math.max(0, (effect.params as { drawCount?: number })?.drawCount ?? 1), 10);
+	const params = { columnIndex: colIdx, stackIndex, drawCount };
+	if (canDo('applyEffect', 'flipThenDraw', params) === true) move('applyEffect', 'flipThenDraw', params);
+}
+
+/** True when we're in flip or flipThenDraw mode and this column is a valid target (any lane with a top card; for flipThenDraw, exclude source only when card says "other"). */
+function isFlipTargetColumn(colIdx: number): boolean {
+	const effect = pendingAbilityEffect.value;
+	if (!effect || !isMyTurn.value || !isOwnerOfTopAbility.value) return false;
+	if (effect.type === 'flip') return columnsWithUncovered.value.includes(colIdx);
+	if (effect.type === 'flipThenDraw') {
+		const excludeSource = (effect.params as { excludeSource?: boolean })?.excludeSource;
+		return excludeSource ? columnsWithUncoveredOther.value.includes(colIdx) : columnsWithUncovered.value.includes(colIdx);
+	}
+	return false;
+}
+
+/** Handle click on the column-top card when in flip or flipThenDraw mode. */
+function onFlipTargetCardClick(colIdx: number) {
+	if (!isFlipTargetColumn(colIdx)) return;
+	if (pendingAbilityEffect.value?.type === 'flip') {
+		submitSingleTargetEffect('flip', colIdx);
+	} else if (pendingAbilityEffect.value?.type === 'flipThenDraw') {
+		submitFlipThenDraw(colIdx);
+	}
 }
 
 /** Resolve stack entry to card details for CommandCardFace (face-up only). */
@@ -1219,17 +1290,33 @@ function fanStyleHover(idx: number): { transform: string; marginLeft: string; zI
 					{{ COLUMN_LABELS[colIdx] }}
 				</button>
 			</template>
+			<template v-else-if="isMyTurn && pendingAbilityEffect?.type === 'flipThenDraw'">
+				<span class="text-slate-300 text-sm">Flip the top card in a column (then draw {{ (pendingAbilityEffect.params as { drawCount?: number })?.drawCount ?? 1 }} card(s)).</span>
+				<div class="flex flex-wrap gap-2 mt-2">
+					<button
+						v-for="colIdx in ((pendingAbilityEffect.params as { excludeSource?: boolean })?.excludeSource ? columnsWithUncoveredOther : columnsWithUncovered)"
+						:key="`flip-draw-${colIdx}`"
+						type="button"
+						class="px-3 py-1.5 rounded-lg border border-amber-500/50 bg-amber-500/10 text-amber-300 text-sm font-medium hover:bg-amber-500/20"
+						@click="onFlipTargetCardClick(colIdx)"
+					>
+						Flip {{ COLUMN_LABELS[colIdx] }}
+					</button>
+				</div>
+			</template>
 			<template v-else-if="isMyTurn && pendingAbilityEffect?.type === 'flip'">
-				<span class="text-slate-300 text-sm">Choose a card on the field to flip</span>
-				<button
-					v-for="colIdx in columnsWithUncovered"
-					:key="`flip-${colIdx}`"
-					type="button"
-					class="px-3 py-1.5 rounded-lg border border-amber-500/50 bg-amber-500/10 text-amber-300 text-sm font-medium hover:bg-amber-500/20"
-					@click="submitSingleTargetEffect('flip', colIdx)"
-				>
-					{{ COLUMN_LABELS[colIdx] }}
-				</button>
+				<span class="text-slate-300 text-sm">Flip the top card in a column.</span>
+				<div class="flex flex-wrap gap-2 mt-2">
+					<button
+						v-for="colIdx in columnsWithUncovered"
+						:key="`flip-${colIdx}`"
+						type="button"
+						class="px-3 py-1.5 rounded-lg border border-amber-500/50 bg-amber-500/10 text-amber-300 text-sm font-medium hover:bg-amber-500/20"
+						@click="onFlipTargetCardClick(colIdx)"
+					>
+						Flip {{ COLUMN_LABELS[colIdx] }}
+					</button>
+				</div>
 			</template>
 			<template v-else-if="isMyTurn && pendingAbilityEffect?.type === 'flipMultiple'">
 				<template v-if="(pendingAbilityEffect.params as { allOtherFaceUp?: boolean })?.allOtherFaceUp">
@@ -1606,7 +1693,7 @@ function fanStyleHover(idx: number): { transform: string; marginLeft: string; zI
 					Skip
 				</button>
 				<button
-					v-else-if="pendingAbilityEffect.type !== 'draw' && pendingAbilityEffect.type !== 'discardThenDraw' && pendingAbilityEffect.type !== 'discardThenReturn' && pendingAbilityEffect.type !== 'discardThenDelete' && pendingAbilityEffect.type !== 'delete' && pendingAbilityEffect.type !== 'return' && pendingAbilityEffect.type !== 'flip' && pendingAbilityEffect.type !== 'flipMultiple' && pendingAbilityEffect.type !== 'shift' && pendingAbilityEffect.type !== 'shiftAllInLine' && pendingAbilityEffect.type !== 'reveal' && pendingAbilityEffect.type !== 'drawThenDiscardThenReveal' && pendingAbilityEffect.type !== 'revealFaceDownThenOptional' && pendingAbilityEffect.type !== 'playFromHandFaceDownAnotherLine' && pendingAbilityEffect.type !== 'playTopOfDeckFaceDownAnotherLine' && pendingAbilityEffect.type !== 'playOneCard' && pendingAbilityEffect.type !== 'rearrange' && pendingAbilityEffect.type !== 'skipCheckCache' && pendingAbilityEffect.type !== 'eitherDiscardOrFlipThis'"
+					v-else-if="pendingAbilityEffect.type !== 'draw' && pendingAbilityEffect.type !== 'discardThenDraw' && pendingAbilityEffect.type !== 'discardThenReturn' && pendingAbilityEffect.type !== 'discardThenDelete' && pendingAbilityEffect.type !== 'delete' && pendingAbilityEffect.type !== 'return' && pendingAbilityEffect.type !== 'flip' && pendingAbilityEffect.type !== 'flipMultiple' && pendingAbilityEffect.type !== 'shift' && pendingAbilityEffect.type !== 'shiftAllInLine' && pendingAbilityEffect.type !== 'reveal' && pendingAbilityEffect.type !== 'drawThenDiscardThenReveal' && pendingAbilityEffect.type !== 'revealFaceDownThenOptional' && pendingAbilityEffect.type !== 'playFromHandFaceDownAnotherLine' && pendingAbilityEffect.type !== 'playTopOfDeckFaceDownAnotherLine' && pendingAbilityEffect.type !== 'playOneCard' && pendingAbilityEffect.type !== 'rearrange' && pendingAbilityEffect.type !== 'skipCheckCache' && pendingAbilityEffect.type !== 'eitherDiscardOrFlipThis' && pendingAbilityEffect.type !== 'refreshThenDraw' && pendingAbilityEffect.type !== 'flipThenDraw'"
 					type="button"
 					class="px-3 py-1.5 rounded-lg border border-amber-500/50 bg-amber-500/10 text-amber-300 text-sm font-medium hover:bg-amber-500/20 transition-colors"
 					@click="resolveTopAbility"
@@ -1719,7 +1806,7 @@ function fanStyleHover(idx: number): { transform: string; marginLeft: string; zI
 					<div class="flex flex-col items-center mb-2" :style="{ marginTop: `${STACK_TOP_OFFSET_REM}rem` }">
 						<div
 							class="stack-splay stack-splay-up relative w-full flex justify-center"
-							:style="{ minHeight: `${Math.max(0, (partitionStack(col, myId).opponent.length - 1) * STACK_STRIP_PEEK_REM) + (partitionStack(col, myId).opponent.length ? STACK_CARD_HEIGHT_REM : 0)}rem` }"
+							:style="{ minHeight: `${Math.max(0, (partitionStack(col, myId).opponent.length - 1) * STACK_STRIP_PEEK_REM) + (partitionStack(col, myId).opponent.length ? STACK_CARD_HEIGHT_REM : 0)}rem`, zIndex: partitionStack(col, myId).opponent.length ? 2 : 0 }"
 						>
 							<div
 								v-for="(entry, stackIdx) in partitionStack(col, myId).opponent"
@@ -1730,6 +1817,7 @@ function fanStyleHover(idx: number): { transform: string; marginLeft: string; zI
 									'items-center justify-center',
 									stackIdx !== partitionStack(col, myId).opponent.length - 1 ? 'stack-card-covered' : '',
 									{ 'stack-card-facedown': !entry.faceUp },
+									{ 'cursor-pointer hover:ring-2 hover:ring-amber-400/80': stackIdx === partitionStack(col, myId).opponent.length - 1 && isFlipTargetColumn(colIdx) },
 								]"
 								:style="{
 									left: '50%',
@@ -1738,6 +1826,7 @@ function fanStyleHover(idx: number): { transform: string; marginLeft: string; zI
 									zIndex: stackIdx,
 									background: 'var(--cyber-panel)',
 								}"
+								@click.stop="(stackIdx === partitionStack(col, myId).opponent.length - 1 && isFlipTargetColumn(colIdx)) && onFlipTargetCardClick(colIdx)"
 							>
 								<template v-if="!entry.faceUp">
 									<CommandCardFace
@@ -1833,6 +1922,7 @@ function fanStyleHover(idx: number): { transform: string; marginLeft: string; zI
 								:class="[
 									entry.faceUp ? 'items-center justify-center border-cyan-500/50 text-slate-200' : 'items-start justify-start border-slate-600 text-slate-500',
 									stackIdx !== partitionStack(col, myId).mine.length - 1 ? 'stack-card-covered' : '',
+									{ 'cursor-pointer hover:ring-2 hover:ring-amber-400/80': stackIdx === partitionStack(col, myId).mine.length - 1 && isFlipTargetColumn(colIdx) },
 								]"
 								:style="{
 									left: '50%',
@@ -1841,6 +1931,7 @@ function fanStyleHover(idx: number): { transform: string; marginLeft: string; zI
 									zIndex: stackIdx,
 									background: 'var(--cyber-panel)',
 								}"
+								@click.stop="(stackIdx === partitionStack(col, myId).mine.length - 1 && isFlipTargetColumn(colIdx)) && onFlipTargetCardClick(colIdx)"
 							>
 								<template v-if="!entry.faceUp">
 									<div class="flex items-center gap-1.5 shrink-0 p-1 w-full">
@@ -2019,7 +2110,10 @@ function fanStyleHover(idx: number): { transform: string; marginLeft: string; zI
 	transform: rotateY(180deg);
 }
 
-/* Covered cards: full card content; bottom is visually covered by the card above (higher z-index) */
+/* Covered cards: don't capture clicks so the top (uncovered) card can be selected for flip etc. */
+.stack-card-covered {
+	pointer-events: none;
+}
 
 /* Face-down cards: hide the three ability rows (no abilities) */
 .stack-card-facedown :deep(.command-card-ability),

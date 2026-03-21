@@ -49,13 +49,8 @@ export function useBotPlayers(matchIDRef: Ref<string>, _humanPlayerID: Ref<strin
 		const turnPhase = s.G?.turnPhase ?? 'Start';
 		const moves = (client as unknown as { moves?: ClientMoves }).moves;
 		if (s.ctx?.phase !== 'play' || !moves?.advanceToAction) return;
-		// Auto-advance until Action (Start → CheckControl → CheckCompile → Action, or CheckCache → End → endTurn)
-		if (turnPhase !== 'Action') {
-			moves.advanceToAction();
-			return;
-		}
-		// If there is a pending ability to resolve and we own the top entry, resolve it first (LIFO).
 		const stack = s.G?.abilityResolutionStack ?? [];
+		// If there is a pending ability to resolve and we own the top entry, resolve it first (Start/End or Action).
 		if (stack.length > 0 && moves.applyEffect) {
 			const top = stack[stack.length - 1];
 			if (top && top.owner === botPlayerID) {
@@ -154,6 +149,21 @@ export function useBotPlayers(matchIDRef: Ref<string>, _humanPlayerID: Ref<strin
 							return;
 						}
 					}
+					if (effect.type === 'flipThenDraw' && top) {
+						const cols = s.G?.columns ?? [];
+						const excludeSource = (effect.params as { excludeSource?: boolean })?.excludeSource;
+						const uncoveredColumns: number[] = cols
+							.map((col: { commandStack: unknown[] }, idx: number) => (col.commandStack.length > 0 ? idx : -1))
+							.filter((i: number) => i >= 0)
+							.filter((colIdx) => !excludeSource || colIdx !== top.columnIndex);
+						const drawCount = Math.min(Math.max(0, (effect.params as { drawCount?: number })?.drawCount ?? 1), 10);
+						if (uncoveredColumns.length > 0) {
+							const colIdx = uncoveredColumns[Math.floor(Math.random() * uncoveredColumns.length)]!;
+							const stackIndex = (cols[colIdx] as { commandStack: unknown[] }).commandStack.length - 1;
+							moves.applyEffect('flipThenDraw', { columnIndex: colIdx, stackIndex, drawCount });
+							return;
+						}
+					}
 					if (effect.type === 'flip') {
 						const cols = s.G?.columns ?? [];
 						const uncoveredColumns: number[] = cols
@@ -193,18 +203,17 @@ export function useBotPlayers(matchIDRef: Ref<string>, _humanPlayerID: Ref<strin
 								col.commandStack.some((e) => !e.faceUp) ? idx : -1
 							)
 							.filter((i: number) => i >= 0);
-						if (columnsWithFaceDown.length >= 1) {
-							const fromColIdx = columnsWithFaceDown[Math.floor(Math.random() * columnsWithFaceDown.length)]!;
-							const toCols = [0, 1, 2].filter((c) => c !== fromColIdx);
-							if (toCols.length > 0) {
-								const toColIdx = toCols[Math.floor(Math.random() * toCols.length)]!;
-								moves.applyEffect('shiftAllInLine', {
-									fromColumnIndex: fromColIdx,
-									toColumnIndex: toColIdx,
-								});
-								return;
-							}
-						}
+						const fromColIdx =
+							columnsWithFaceDown.length >= 1
+								? columnsWithFaceDown[Math.floor(Math.random() * columnsWithFaceDown.length)]!
+								: 0;
+						const toCols = [0, 1, 2].filter((c) => c !== fromColIdx);
+						const toColIdx = toCols[Math.floor(Math.random() * toCols.length)] ?? 1;
+						moves.applyEffect('shiftAllInLine', {
+							fromColumnIndex: fromColIdx,
+							toColumnIndex: toColIdx,
+						});
+						return;
 					}
 					if (effect.type === 'reveal') {
 						moves.applyEffect('reveal', {});
@@ -342,8 +351,7 @@ export function useBotPlayers(matchIDRef: Ref<string>, _humanPlayerID: Ref<strin
 						if (hand.length > 0) {
 							const handIndex = Math.floor(Math.random() * hand.length);
 							const columnIndex = Math.floor(Math.random() * NUM_COLUMNS);
-							const faceUp = Math.random() < 0.5;
-							moves.applyEffect('playOneCard', { handIndex, columnIndex, faceUp });
+							moves.applyEffect('playOneCard', { handIndex, columnIndex, faceUp: false });
 							return;
 						}
 					}
@@ -356,7 +364,7 @@ export function useBotPlayers(matchIDRef: Ref<string>, _humanPlayerID: Ref<strin
 						return;
 					}
 					if (effect.type === 'eitherDiscardOrFlipThis') {
-						const hand = state?.G?.players?.[topAbilityEntry.owner]?.hand ?? [];
+						const hand = (s.G?.players?.[top.owner]?.hand ?? []) as string[];
 						const choice = hand.length > 0 && Math.random() < 0.5 ? 'discard' as const : 'flip' as const;
 						if (choice === 'discard') {
 							const cardId = hand[Math.floor(Math.random() * hand.length)];
@@ -382,6 +390,11 @@ export function useBotPlayers(matchIDRef: Ref<string>, _humanPlayerID: Ref<strin
 				}
 			}
 		}
+		// Not in Action phase and no ability resolved: advance (Start → Check Control → Check Compile → Action → Check Cache → End).
+		if (turnPhase !== 'Action') {
+			moves.advanceToAction();
+			return;
+		}
 		const hand = s.G?.players?.[botPlayerID]?.hand;
 		if (!hand?.length) {
 			if (moves.refreshHand) moves.refreshHand();
@@ -390,8 +403,7 @@ export function useBotPlayers(matchIDRef: Ref<string>, _humanPlayerID: Ref<strin
 		if (!moves?.playCommandCard) return;
 		const handIndex = Math.floor(Math.random() * hand.length);
 		const columnIndex = Math.floor(Math.random() * NUM_COLUMNS);
-		const faceUp = Math.random() < 0.5;
-		moves.playCommandCard(columnIndex, handIndex, faceUp);
+		moves.playCommandCard(columnIndex, handIndex, false);
 	}
 
 	function startBots(matchID: string) {
