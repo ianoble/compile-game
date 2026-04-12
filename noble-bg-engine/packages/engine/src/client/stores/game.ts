@@ -20,7 +20,12 @@ export const useGameStore = defineStore('game', () => {
   const clientVersion = ref(0);
 
   const G = shallowRef<Record<string, unknown>>({});
-  const ctx = shallowRef<{ currentPlayer: string; phase?: string; gameover?: unknown }>({ currentPlayer: '0' });
+  const ctx = shallowRef<{
+    currentPlayer: string;
+    phase?: string | null;
+    gameover?: unknown;
+    activePlayers?: Record<string, string> | null;
+  }>({ currentPlayer: '0' });
   const currentPlayer = ref('0');
   const gameover = ref<{ winner?: string; isDraw?: boolean } | undefined>();
   const isActive = ref(false);
@@ -30,7 +35,14 @@ export const useGameStore = defineStore('game', () => {
   const matchID = ref<string | null>(null);
   const gameId = ref<string | null>(null);
 
-  const isMyTurn = computed(() => isActive.value && currentPlayer.value === playerID.value);
+  /** True when this client may make a move (current turn or listed in ctx.activePlayers). */
+  const isMyTurn = computed(() => {
+    if (!isActive.value || playerID.value == null) return false;
+    const c = ctx.value;
+    const ap = c.activePlayers;
+    if (ap && playerID.value in ap) return true;
+    return currentPlayer.value === playerID.value;
+  });
 
   const moves = computed(() => {
     clientVersion.value;
@@ -40,7 +52,12 @@ export const useGameStore = defineStore('game', () => {
   function syncState(state: unknown) {
     const s = state as {
       G: Record<string, unknown>;
-      ctx: { currentPlayer: string; phase?: string; gameover?: unknown };
+      ctx: {
+        currentPlayer: string;
+        phase?: string | null;
+        gameover?: unknown;
+        activePlayers?: Record<string, string> | null;
+      };
       isActive: boolean;
       isConnected: boolean;
     } | null;

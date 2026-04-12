@@ -7,7 +7,12 @@ import { useToast, type ToastContext } from './useToast.js';
 export interface GameContext<S extends BaseGameState = BaseGameState> {
   state: ComputedRef<S>;
   /** Boardgame.io context (phase, currentPlayer, etc.). */
-  ctx: Ref<{ currentPlayer: string; phase?: string; gameover?: unknown }>;
+  ctx: Ref<{
+    currentPlayer: string;
+    phase?: string | null;
+    gameover?: unknown;
+    activePlayers?: Record<string, string> | null;
+  }>;
   currentPlayer: Ref<string>;
   playerID: Ref<string | null>;
   matchID: Ref<string | null>;
