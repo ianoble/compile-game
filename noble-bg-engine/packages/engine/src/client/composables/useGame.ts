@@ -20,7 +20,11 @@ export interface GameContext<S extends BaseGameState = BaseGameState> {
   gameover: Ref<{ winner?: string; isDraw?: boolean } | undefined>;
   isActive: Ref<boolean>;
   isConnected: Ref<boolean>;
-  /** True while re-authenticating with stored credentials after a page refresh. */
+  /**
+   * True while rejoining with stored credentials after a refresh.
+   * Cleared after the first synced state, or after a timeout if the socket never connects
+   * (so the UI can show generic “connecting / check server URL” copy).
+   */
   reconnecting: Ref<boolean>;
   isMyTurn: ComputedRef<boolean>;
   /** Dispatch a boardgame.io move by name. Shows a toast if the move is invalid. */

@@ -7,6 +7,9 @@ import { gameMap } from '../../games/registry.js';
 let _serverUrl = '';
 let _debug = false;
 
+/** If the socket never connects, stop showing "session restore" so the UI can surface server URL hints. */
+const SESSION_RESTORE_TIMEOUT_MS = 12_000;
+
 export function setServerUrl(url: string) {
   _serverUrl = url;
 }
@@ -17,7 +20,25 @@ export function setDebug(enabled: boolean) {
 
 export const useGameStore = defineStore('game', () => {
   let bgioClient: ReturnType<typeof Client> | null = null;
+  let sessionRestoreTimer: ReturnType<typeof setTimeout> | null = null;
   const clientVersion = ref(0);
+
+  function clearSessionRestoreTimer() {
+    if (sessionRestoreTimer != null) {
+      clearTimeout(sessionRestoreTimer);
+      sessionRestoreTimer = null;
+    }
+  }
+
+  function scheduleSessionRestoreTimeout() {
+    clearSessionRestoreTimer();
+    sessionRestoreTimer = setTimeout(() => {
+      sessionRestoreTimer = null;
+      if (reconnecting.value && !isConnected.value) {
+        reconnecting.value = false;
+      }
+    }, SESSION_RESTORE_TIMEOUT_MS);
+  }
 
   const G = shallowRef<Record<string, unknown>>({});
   const ctx = shallowRef<{
@@ -39,6 +60,7 @@ export const useGameStore = defineStore('game', () => {
   const isMyTurn = computed(() => {
     if (!isActive.value || playerID.value == null) return false;
     const c = ctx.value;
+    if (!c) return false;
     const ap = c.activePlayers;
     if (ap && playerID.value in ap) return true;
     return currentPlayer.value === playerID.value;
@@ -51,28 +73,44 @@ export const useGameStore = defineStore('game', () => {
 
   function syncState(state: unknown) {
     const s = state as {
-      G: Record<string, unknown>;
-      ctx: {
+      G?: Record<string, unknown> | null;
+      ctx?: {
         currentPlayer: string;
         phase?: string | null;
         gameover?: unknown;
         activePlayers?: Record<string, string> | null;
-      };
-      isActive: boolean;
-      isConnected: boolean;
+      } | null;
+      isActive?: boolean;
+      isConnected?: boolean;
     } | null;
     if (!s) return;
 
     if (reconnecting.value) {
       reconnecting.value = false;
+      clearSessionRestoreTimer();
     }
 
-    G.value = s.G;
-    ctx.value = s.ctx;
-    currentPlayer.value = s.ctx.currentPlayer;
-    gameover.value = s.ctx.gameover as typeof gameover.value;
-    isActive.value = s.isActive;
-    isConnected.value = s.isConnected;
+    if (s.G != null) {
+      G.value = s.G;
+    }
+    // Merge ctx so partial payloads (e.g. missing `phase`) don’t wipe fields from the previous sync.
+    if (s.ctx != null) {
+      const prev = ctx.value;
+      ctx.value = { ...prev, ...s.ctx };
+      if (typeof s.ctx.currentPlayer === 'string') {
+        currentPlayer.value = s.ctx.currentPlayer;
+      }
+      if (s.ctx.gameover !== undefined) {
+        gameover.value = s.ctx.gameover as typeof gameover.value;
+      }
+    }
+    // Some subscribe callbacks omit these; assigning undefined made the UI think the match stopped.
+    if (typeof s.isActive === 'boolean') {
+      isActive.value = s.isActive;
+    }
+    if (typeof s.isConnected === 'boolean') {
+      isConnected.value = s.isConnected;
+    }
   }
 
   function connect(gId: string, mID: string, pID: string, credentials?: string) {
@@ -83,8 +121,10 @@ export const useGameStore = defineStore('game', () => {
     matchID.value = mID;
     playerID.value = pID;
 
+    clearSessionRestoreTimer();
     if (credentials) {
       reconnecting.value = true;
+      scheduleSessionRestoreTimeout();
     }
 
     bgioClient = Client({
@@ -102,6 +142,7 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function disconnect() {
+    clearSessionRestoreTimer();
     bgioClient?.stop();
     bgioClient = null;
     clientVersion.value++;

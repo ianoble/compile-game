@@ -401,8 +401,12 @@ async function abandonGame() {
 				<p v-else class="text-2xl font-bold text-slate-400">It's a draw.</p>
 			</div>
 
-			<div v-if="reconnecting" class="text-center">
-				<p class="text-cyan-400/80">Reconnecting...</p>
+			<div v-if="reconnecting" class="text-center text-slate-300 space-y-2 max-w-md mx-auto">
+				<p class="text-cyan-400/80">Restoring your saved session…</p>
+				<p class="text-xs text-slate-400">
+					Waiting for the game server. If this hangs, start the backend (e.g. port 8000) or fix
+					<code class="mx-0.5 rounded bg-slate-800 px-1">VITE_SERVER_URL</code>.
+				</p>
 			</div>
 
 			<DraftProtocol v-if="!reconnecting && phase === 'draft'" />

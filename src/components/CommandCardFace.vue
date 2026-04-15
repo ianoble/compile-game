@@ -33,10 +33,12 @@ const abilityRows = computed(() => [
 			class="command-card-ability flex-1 min-h-0"
 		>
 			<template v-if="ability && (ability.emphasis || ability.text)">
-				<span v-if="ability.emphasis" class="command-card-ability-emphasis">{{ ability.emphasis }} </span>
+				<span v-if="ability.emphasis" class="command-card-ability-emphasis"
+					>{{ ability.emphasis }}
+				</span>
 				{{ ability.text }}
 			</template>
-			<template v-else>—</template>
+			<template v-else>-</template>
 		</div>
 	</div>
 </template>
