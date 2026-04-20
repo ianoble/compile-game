@@ -3,6 +3,8 @@ import type { GameDefinition, BaseGameState, LogEntry } from './types/index.js';
 
 const INVALID_MOVE = 'INVALID_MOVE';
 
+type MoveContext = { G: unknown; ctx: { currentPlayer: string }; playerID: string };
+
 /**
  * Prepare a {@link GameDefinition} for registration with boardgame.io's
  * `Server`.  Applies three wrappers in order:
@@ -35,9 +37,34 @@ export function prepareGame(def: GameDefinition): Game {
   return game;
 }
 
+function wrapMoveWithHistory(
+  moveName: string,
+  moveFn: (context: MoveContext, ...args: unknown[]) => unknown,
+): (context: MoveContext, ...args: unknown[]) => unknown {
+  return (context, ...args) => {
+    const result = moveFn(context, ...args);
+    if (result === INVALID_MOVE) return INVALID_MOVE;
+
+    const G = context.G as BaseGameState;
+    if (!G.history) G.history = [];
+
+    const logEntry: LogEntry = {
+      seq: G.history.length + 1,
+      timestamp: new Date().toISOString(),
+      playerID: context.playerID ?? context.ctx.currentPlayer,
+      moveName,
+      args: args.map(sanitiseArg),
+    };
+    G.history.push(logEntry);
+
+    return result;
+  };
+}
+
 /**
  * Wraps `setup` to inject `history: []` and wraps every move so that a
  * {@link LogEntry} is appended to `G.history` after successful execution.
+ * Long-form moves `{ move, undoable, ... }` keep their metadata for boardgame.io.
  * Applied unconditionally by {@link prepareGame}.
  */
 function applyHistoryTracking(game: Game): Game {
@@ -46,31 +73,20 @@ function applyHistoryTracking(game: Game): Game {
   const trackedMoves: Record<string, unknown> = {};
 
   for (const [name, entry] of Object.entries(originalMoves)) {
-    const moveFn = typeof entry === 'function'
-      ? entry
-      : (entry as { move: (...a: unknown[]) => unknown }).move;
-
-    trackedMoves[name] = (
-      context: { G: unknown; ctx: { currentPlayer: string }; playerID: string },
-      ...args: unknown[]
-    ) => {
-      const result = (moveFn as (...a: unknown[]) => unknown)(context, ...args);
-      if (result === INVALID_MOVE) return INVALID_MOVE;
-
-      const G = context.G as BaseGameState;
-      if (!G.history) G.history = [];
-
-      const entry: LogEntry = {
-        seq: G.history.length + 1,
-        timestamp: new Date().toISOString(),
-        playerID: context.playerID ?? context.ctx.currentPlayer,
-        moveName: name,
-        args: args.map(sanitiseArg),
+    if (typeof entry === 'function') {
+      trackedMoves[name] = wrapMoveWithHistory(
+        name,
+        entry as (context: MoveContext, ...args: unknown[]) => unknown,
+      );
+    } else if (entry != null && typeof entry === 'object' && 'move' in entry) {
+      const desc = entry as { move: (context: MoveContext, ...args: unknown[]) => unknown };
+      trackedMoves[name] = {
+        ...entry,
+        move: wrapMoveWithHistory(name, desc.move),
       };
-      G.history.push(entry);
-
-      return result;
-    };
+    } else {
+      trackedMoves[name] = entry;
+    }
   }
 
   return {
@@ -104,28 +120,37 @@ function applyMoveValidation(
   const wrappedMoves: Record<string, unknown> = {};
 
   for (const [name, entry] of Object.entries(originalMoves)) {
-    const moveFn = typeof entry === 'function'
-      ? entry
-      : (entry as { move: (...a: unknown[]) => unknown }).move;
+    const wrapValidatedInner = (
+      inner: (context: MoveContext, ...args: unknown[]) => unknown,
+    ): ((context: MoveContext, ...args: unknown[]) => unknown) => {
+      return (context, ...args) => {
+        const v = validate(
+          {
+            G: context.G as BaseGameState,
+            playerID: context.playerID,
+            currentPlayer: context.ctx.currentPlayer,
+          },
+          name,
+          ...args,
+        );
 
-    wrappedMoves[name] = (
-      context: { G: unknown; ctx: { currentPlayer: string }; playerID: string },
-      ...args: unknown[]
-    ) => {
-      const result = validate(
-        {
-          G: context.G as BaseGameState,
-          playerID: context.playerID,
-          currentPlayer: context.ctx.currentPlayer,
-        },
-        name,
-        ...args,
-      );
+        if (v !== true) return INVALID_MOVE;
 
-      if (result !== true) return INVALID_MOVE;
-
-      return (moveFn as (...a: unknown[]) => unknown)(context, ...args);
+        return inner(context, ...args);
+      };
     };
+
+    if (typeof entry === 'function') {
+      wrappedMoves[name] = wrapValidatedInner(entry as (context: MoveContext, ...args: unknown[]) => unknown);
+    } else if (entry != null && typeof entry === 'object' && 'move' in entry) {
+      const desc = entry as { move: (context: MoveContext, ...args: unknown[]) => unknown };
+      wrappedMoves[name] = {
+        ...entry,
+        move: wrapValidatedInner(desc.move),
+      };
+    } else {
+      wrappedMoves[name] = entry;
+    }
   }
 
   return { ...game, moves: wrappedMoves } as Game;

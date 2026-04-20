@@ -27,6 +27,10 @@ export interface GameContext<S extends BaseGameState = BaseGameState> {
    */
   reconnecting: Ref<boolean>;
   isMyTurn: ComputedRef<boolean>;
+  /** True when undo is likely allowed (local: `_undo` stack; multiplayer: `numMoves` proxy — server strips `_undo`). */
+  canUndo: ComputedRef<boolean>;
+  /** Rewind the last undoable move (server-authoritative in multiplayer). */
+  undo: () => void;
   /** Dispatch a boardgame.io move by name. Shows a toast if the move is invalid. */
   move: (name: string, ...args: unknown[]) => void;
   canDo: (moveName: string, ...args: unknown[]) => true | string;
@@ -68,6 +72,11 @@ export function provideGameContext(toast?: ToastContext): GameContext {
     const fn = store.moves[name];
     if (typeof fn === 'function') {
       (fn as (...a: unknown[]) => void)(...args);
+    } else {
+      showToast(
+        `Move “${name}” is not available. Reconnect or refresh if the client is out of date with the server.`,
+        'error',
+      );
     }
   }
 
@@ -83,6 +92,8 @@ export function provideGameContext(toast?: ToastContext): GameContext {
     isConnected: computed({ get: () => store.isConnected, set() {} }),
     reconnecting: computed({ get: () => store.reconnecting, set() {} }),
     isMyTurn: computed(() => store.isMyTurn),
+    canUndo: computed(() => store.canUndo),
+    undo: () => store.undo(),
     move,
     canDo,
     connect: store.connect,

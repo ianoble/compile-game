@@ -46,6 +46,8 @@ export const useGameStore = defineStore('game', () => {
     phase?: string | null;
     gameover?: unknown;
     activePlayers?: Record<string, string> | null;
+    /** Moves by the current player this turn; present on synced ctx in multiplayer. */
+    numMoves?: number;
   }>({ currentPlayer: '0' });
   const currentPlayer = ref('0');
   const gameover = ref<{ winner?: string; isDraw?: boolean } | undefined>();
@@ -70,6 +72,41 @@ export const useGameStore = defineStore('game', () => {
     clientVersion.value;
     return bgioClient?.moves ?? {};
   });
+
+  /**
+   * Whether the UI should offer undo. In **multiplayer**, boardgame.io strips `_undo` / `_redo` from every
+   * sync/update (`applyPlayerView`), so we approximate using `ctx.numMoves` (undo needs ≥2 snapshots; each
+   * normal move increments `numMoves`). Single-player/local clients keep the real `_undo` stack.
+   */
+  const canUndo = computed(() => {
+    clientVersion.value;
+    const c = bgioClient;
+    if (!c || !isMyTurn.value) return false;
+    const raw = c.getState() as {
+      _undo?: unknown[];
+      ctx?: {
+        numMoves?: number;
+        activePlayers?: Record<string, string> | null;
+      };
+    } | null;
+    if (raw?.ctx == null) return false;
+
+    const ap = raw.ctx.activePlayers;
+    if (ap != null) {
+      const seats = Object.keys(ap);
+      if (seats.length > 1) return false;
+      if (seats.length === 1 && playerID.value != null && !(playerID.value in ap)) return false;
+    }
+
+    if (_serverUrl) {
+      return (raw.ctx.numMoves ?? 0) >= 2;
+    }
+    return Array.isArray(raw._undo) && raw._undo.length >= 2;
+  });
+
+  function undo() {
+    bgioClient?.undo();
+  }
 
   function syncState(state: unknown) {
     const s = state as {
@@ -111,6 +148,8 @@ export const useGameStore = defineStore('game', () => {
     if (typeof s.isConnected === 'boolean') {
       isConnected.value = s.isConnected;
     }
+
+    clientVersion.value++;
   }
 
   function connect(gId: string, mID: string, pID: string, credentials?: string) {
@@ -169,6 +208,8 @@ export const useGameStore = defineStore('game', () => {
     gameId,
     isMyTurn,
     moves,
+    canUndo,
+    undo,
     connect,
     disconnect,
   };
